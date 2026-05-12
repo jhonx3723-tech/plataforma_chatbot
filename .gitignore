@@ -1,0 +1,34 @@
+# Dependencias
+node_modules/
+**/node_modules/
+
+# Variables de entorno — NUNCA subir al repo
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# Builds del frontend
+frontend/dist/
+frontend/.vite/
+
+# Base de datos local antigua
+backend/chatbot.json
+*.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editores
+.vscode/
+.idea/
+
+# SO
+.DS_Store
+Thumbs.db
+
+# Carpetas/archivos locales
+SRC/
+iniciar.bat
