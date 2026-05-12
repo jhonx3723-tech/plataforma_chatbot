@@ -30,5 +30,5 @@ npm-debug.log*
 Thumbs.db
 
 # Carpetas/archivos locales
-SRC/
+/SRC/
 iniciar.bat

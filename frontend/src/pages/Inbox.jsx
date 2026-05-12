@@ -1,0 +1,797 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { conversationsAPI, templatesAPI, labelsAPI, API_BASE } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import {
+  Send, Bot, UserCheck, X, RefreshCw, Search, MessageSquare,
+  RotateCcw, UserPlus, StickyNote, ChevronDown, Check,
+} from 'lucide-react';
+import ContactPanel from '../components/inbox/ContactPanel';
+import TemplatePopover from '../components/inbox/TemplatePopover';
+import LabelSelector from '../components/inbox/LabelSelector';
+
+const STATUS_LABELS = { bot: 'Bot', human: 'Agente', closed: 'Cerrado' };
+const STATUS_COLORS = {
+  bot:    'bg-brand-100 text-brand-700 border-brand-200',
+  human:  'bg-amber-100 text-amber-700 border-amber-200',
+  closed: 'bg-slate-100 text-slate-500 border-slate-200',
+};
+const STATUS_DOT = {
+  bot:    'bg-brand-500',
+  human:  'bg-amber-500',
+  closed: 'bg-slate-400',
+};
+
+const FILTER_TABS = [
+  { key: 'all',    label: 'Todas'   },
+  { key: 'mine',   label: 'Mis'     },
+  { key: 'bot',    label: 'Bot'     },
+  { key: 'human',  label: 'Agente'  },
+  { key: 'closed', label: 'Cerradas'},
+];
+
+function formatTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  if (diffDays === 0) return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  if (diffDays === 1) return 'Ayer';
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+}
+
+function avatarInitials(name) {
+  if (!name) return '?';
+  return name.slice(0, 2).toUpperCase();
+}
+
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 150].forEach((delay, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = i === 0 ? 880 : 1100;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + delay / 1000);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay / 1000 + 0.2);
+      osc.start(ctx.currentTime + delay / 1000);
+      osc.stop(ctx.currentTime + delay / 1000 + 0.2);
+    });
+  } catch {}
+}
+
+function useTabTitle(unread) {
+  useEffect(() => {
+    document.title = unread > 0 ? `(${unread}) Bandeja — BotBuilder` : 'Bandeja — BotBuilder';
+    return () => { document.title = 'BotBuilder'; };
+  }, [unread]);
+}
+
+// ── Dropdown de asignación ─────────────────────────────────────────────────────
+function AssignDropdown({ agents, assigned, currentUserId, onAssign, onClose }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    function h(e) { if (ref.current && !ref.current.contains(e.target)) onClose(); }
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [onClose]);
+
+  return (
+    <div ref={ref} className="absolute top-full right-0 mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1">
+      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-1.5">Asignar a</p>
+      {agents.map(a => (
+        <button
+          key={a.id}
+          onClick={() => onAssign(a.id === assigned ? null : a.id)}
+          className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors"
+        >
+          <div className="w-6 h-6 rounded-full bg-brand-100 text-brand-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+            {avatarInitials(a.username)}
+          </div>
+          <span className="text-sm text-slate-700 flex-1 text-left truncate">
+            {a.username}
+            {a.id === currentUserId && <span className="text-slate-400 text-xs"> (yo)</span>}
+          </span>
+          {a.id === assigned && <Check size={13} className="text-brand-500 flex-shrink-0" />}
+        </button>
+      ))}
+      {assigned && (
+        <>
+          <div className="border-t border-slate-100 my-1" />
+          <button
+            onClick={() => onAssign(null)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-red-50 transition-colors text-red-400 text-sm"
+          >
+            <X size={13} /> Quitar asignación
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Componente principal ───────────────────────────────────────────────────────
+export default function Inbox() {
+  const { user } = useAuth();
+  const [conversations, setConversations] = useState([]);
+  const [selected, setSelected]           = useState(null);
+  const [messages, setMessages]           = useState([]);
+  const [reply, setReply]                 = useState('');
+  const [noteMode, setNoteMode]           = useState(false);
+  const [sending, setSending]             = useState(false);
+  const [loadingConv, setLoadingConv]     = useState(true);
+  const [loadingMsgs, setLoadingMsgs]     = useState(false);
+  const [filter, setFilter]               = useState('all');
+  const [search, setSearch]               = useState('');
+  const [realtimeStatus, setRealtimeStatus] = useState('connecting');
+  const [templates, setTemplates]         = useState([]);
+  const [labels, setLabels]               = useState([]);
+  const [agents, setAgents]               = useState([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templateQuery, setTemplateQuery] = useState('');
+  const [showAssign, setShowAssign]       = useState(false);
+
+  const messagesEndRef = useRef(null);
+  const pollRef        = useRef(null);
+  const selectedRef    = useRef(null);
+  const replyInputRef  = useRef(null);
+
+  selectedRef.current = selected;
+
+  const totalUnread = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
+  useTabTitle(totalUnread);
+
+  const companyId = selected?.company_id || null;
+
+  // Cargar templates, labels y agentes cuando cambia la empresa
+  useEffect(() => {
+    if (!companyId) return;
+    Promise.all([
+      templatesAPI.getAll(companyId),
+      labelsAPI.getAll(companyId),
+      conversationsAPI.getAgents(companyId),
+    ]).then(([t, l, a]) => {
+      setTemplates(t);
+      setLabels(l);
+      setAgents(a);
+    }).catch(() => {});
+  }, [companyId]);
+
+  const loadConversations = useCallback(async () => {
+    try {
+      const data = await conversationsAPI.getAll();
+      setConversations(prev => {
+        const prevUnread = prev.reduce((a, c) => a + (c.unread || 0), 0);
+        const newUnread  = data.reduce((a, c) => a + (c.unread || 0), 0);
+        if (newUnread > prevUnread) playNotificationSound();
+        return data;
+      });
+    } catch { /* silent */ }
+    finally { setLoadingConv(false); }
+  }, []);
+
+  const loadMessages = useCallback(async (id) => {
+    try {
+      const data = await conversationsAPI.get(id);
+      setSelected(data);
+      setMessages(data.messages || []);
+      setConversations(prev => prev.map(c => c.id === id ? { ...c, unread: 0 } : c));
+    } catch { /* silent */ }
+    finally { setLoadingMsgs(false); }
+  }, []);
+
+  // SSE — realtime
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    loadConversations();
+
+    const es = new EventSource(`${API_BASE}/events?token=${token}`);
+
+    es.addEventListener('ready', (e) => {
+      const { realtime } = JSON.parse(e.data);
+      setRealtimeStatus(realtime ? 'live' : 'polling');
+      if (!realtime) pollRef.current = setInterval(loadConversations, 4000);
+    });
+
+    es.addEventListener('conversation', (e) => {
+      const { eventType, new: conv, old: oldConv } = JSON.parse(e.data);
+      setConversations(prev => {
+        if (eventType === 'INSERT') { playNotificationSound(); return [{ ...conv, unread: 0 }, ...prev]; }
+        if (eventType === 'UPDATE') return prev.map(c => c.id === conv.id ? { ...c, ...conv } : c);
+        if (eventType === 'DELETE') return prev.filter(c => c.id !== oldConv.id);
+        return prev;
+      });
+    });
+
+    es.addEventListener('message', (e) => {
+      const { new: msg } = JSON.parse(e.data);
+      if (!msg) return;
+      if (selectedRef.current?.id === msg.conversation_id) {
+        setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg]);
+      }
+      if (msg.direction === 'inbound') {
+        playNotificationSound();
+        if (selectedRef.current?.id !== msg.conversation_id) {
+          setConversations(prev => prev.map(c =>
+            c.id === msg.conversation_id
+              ? { ...c, last_message: msg.content, last_message_at: msg.created_at, unread: (c.unread || 0) + 1 }
+              : c
+          ));
+        }
+      }
+    });
+
+    es.onerror = () => {
+      setRealtimeStatus('polling');
+      es.close();
+      if (!pollRef.current) pollRef.current = setInterval(loadConversations, 4000);
+    };
+
+    return () => { es.close(); clearInterval(pollRef.current); };
+  }, [loadConversations]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  async function selectConversation(conv) {
+    setLoadingMsgs(true);
+    setMessages([]);
+    setReply('');
+    setNoteMode(false);
+    setShowTemplates(false);
+    setShowAssign(false);
+    await loadMessages(conv.id);
+  }
+
+  function handleReplyChange(e) {
+    const val = e.target.value;
+    setReply(val);
+    if (!noteMode && val.startsWith('/')) {
+      setTemplateQuery(val.slice(1));
+      setShowTemplates(true);
+    } else {
+      setShowTemplates(false);
+      setTemplateQuery('');
+    }
+  }
+
+  function handleTemplateSelect(content) {
+    setReply(content);
+    setShowTemplates(false);
+    setTemplateQuery('');
+    replyInputRef.current?.focus();
+  }
+
+  async function handleSend(e) {
+    e.preventDefault();
+    if (!reply.trim() || !selected) return;
+    setSending(true);
+    try {
+      let msg;
+      if (noteMode) {
+        msg = await conversationsAPI.addNote(selected.id, reply.trim());
+      } else {
+        msg = await conversationsAPI.reply(selected.id, reply.trim());
+        setSelected(prev => ({ ...prev, status: 'human' }));
+      }
+      setReply('');
+      setShowTemplates(false);
+      setMessages(prev => [...prev, msg]);
+    } catch { /* silent */ }
+    finally { setSending(false); }
+  }
+
+  async function handleStatus(status) {
+    if (!selected) return;
+    try {
+      const updated = await conversationsAPI.setStatus(selected.id, status);
+      setSelected(prev => ({ ...prev, status: updated.status }));
+      setConversations(prev => prev.map(c => c.id === updated.id ? { ...c, status: updated.status } : c));
+    } catch { /* silent */ }
+  }
+
+  async function handleRestartBot() {
+    if (!selected) return;
+    try {
+      const updated = await conversationsAPI.restartBot(selected.id);
+      setSelected(prev => ({ ...prev, status: 'bot' }));
+      setConversations(prev => prev.map(c => c.id === updated.id ? { ...c, status: 'bot' } : c));
+    } catch { /* silent */ }
+  }
+
+  async function handleAssign(userId) {
+    if (!selected) return;
+    setShowAssign(false);
+    try {
+      const updated = await conversationsAPI.assign(selected.id, userId);
+      const agentName = userId ? (agents.find(a => a.id === userId)?.username || null) : null;
+      setSelected(prev => ({ ...prev, assigned_to: userId, assigned_agent_name: agentName }));
+      setConversations(prev => prev.map(c =>
+        c.id === selected.id ? { ...c, assigned_to: userId, assigned_agent_name: agentName } : c
+      ));
+    } catch { /* silent */ }
+  }
+
+  function handleLabelsChange(newLabelIds, newLabelsArray) {
+    setSelected(prev => ({ ...prev, label_ids: newLabelIds }));
+    setConversations(prev => prev.map(c => c.id === selected?.id ? { ...c, label_ids: newLabelIds } : c));
+    if (newLabelsArray) setLabels(newLabelsArray);
+  }
+
+  const filteredConvs = conversations.filter(c => {
+    if (filter === 'mine')   return c.assigned_to === user?.id;
+    if (filter !== 'all')    return c.status === filter;
+    return true;
+  }).filter(c => {
+    if (!search) return true;
+    return c.user_phone.includes(search) ||
+      (c.contact_name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.last_message || '').toLowerCase().includes(search.toLowerCase());
+  });
+
+  const inputPlaceholder = noteMode
+    ? 'Escribe una nota interna (solo visible para el equipo)...'
+    : 'Escribe un mensaje o / para plantillas...';
+
+  return (
+    <div className="flex h-full bg-slate-50">
+
+      {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
+      <div className="w-80 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
+
+        <div className="px-4 py-4 border-b border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-slate-900">Conversaciones</h1>
+              {totalUnread > 0 && (
+                <span className="w-5 h-5 bg-brand-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  {totalUnread > 9 ? '9+' : totalUnread}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span title={realtimeStatus === 'live' ? 'Tiempo real activo' : realtimeStatus === 'polling' ? 'Modo polling' : 'Conectando...'}>
+                <span className={`w-2 h-2 rounded-full inline-block ${
+                  realtimeStatus === 'live'    ? 'bg-emerald-500 animate-pulse' :
+                  realtimeStatus === 'polling' ? 'bg-amber-400' : 'bg-slate-300 animate-pulse'
+                }`} />
+              </span>
+              <button onClick={loadConversations} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors">
+                <RefreshCw size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar conversación..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent placeholder:text-slate-400"
+            />
+          </div>
+        </div>
+
+        {/* Filter tabs */}
+        <div className="px-3 py-2 border-b border-slate-100 flex gap-1 flex-wrap">
+          {FILTER_TABS.map(tab => {
+            const count = tab.key === 'all'  ? conversations.length
+                        : tab.key === 'mine' ? conversations.filter(c => c.assigned_to === user?.id).length
+                        : conversations.filter(c => c.status === tab.key).length;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`flex-1 text-xs py-1.5 rounded-lg font-semibold transition-colors ${
+                  filter === tab.key ? 'bg-brand-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                {tab.label}
+                {count > 0 && <span className={`ml-1 ${filter === tab.key ? 'opacity-80' : 'opacity-50'}`}>{count}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+          {loadingConv ? (
+            <div className="p-4 space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="animate-pulse flex items-start gap-2.5">
+                  <div className="w-9 h-9 rounded-full bg-slate-100 flex-shrink-0" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-3 bg-slate-100 rounded w-3/4" />
+                    <div className="h-2 bg-slate-50 rounded w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredConvs.length === 0 ? (
+            <div className="p-8 text-center text-slate-400">
+              <MessageSquare size={28} className="mx-auto mb-2 text-slate-200" />
+              <p className="text-sm font-medium">{search ? 'Sin resultados' : 'Sin conversaciones'}</p>
+              {search && <button onClick={() => setSearch('')} className="text-xs text-brand-500 mt-1 hover:underline">Limpiar búsqueda</button>}
+            </div>
+          ) : (
+            filteredConvs.map(conv => (
+              <button
+                key={conv.id}
+                onClick={() => selectConversation(conv)}
+                className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors ${
+                  selected?.id === conv.id ? 'bg-brand-50 border-r-2 border-brand-500' : ''
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  {/* Avatar */}
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${
+                    conv.status === 'bot' ? 'bg-brand-500' : conv.status === 'human' ? 'bg-amber-500' : 'bg-slate-400'
+                  }`}>
+                    {conv.user_phone.slice(-2)}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <p className={`text-sm font-semibold truncate ${selected?.id === conv.id ? 'text-brand-700' : 'text-slate-900'}`}>
+                        {conv.contact_name || conv.user_phone}
+                      </p>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {conv.unread > 0 && (
+                          <span className="w-4 h-4 bg-brand-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                            {conv.unread > 9 ? '9+' : conv.unread}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-400">{formatTime(conv.last_message_at)}</span>
+                      </div>
+                    </div>
+
+                    {conv.contact_name && (
+                      <p className="text-[10px] text-slate-400 truncate">{conv.user_phone}</p>
+                    )}
+
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold border flex-shrink-0 ${STATUS_COLORS[conv.status]}`}>
+                        <span className={`w-1 h-1 rounded-full ${STATUS_DOT[conv.status]}`} />
+                        {STATUS_LABELS[conv.status]}
+                      </span>
+                      <p className="text-xs text-slate-400 truncate flex-1">{conv.last_message}</p>
+                    </div>
+
+                    {/* Agente asignado en lista */}
+                    {conv.assigned_agent_name && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className="w-3.5 h-3.5 rounded-full bg-violet-100 text-violet-600 text-[8px] font-bold flex items-center justify-center">
+                          {avatarInitials(conv.assigned_agent_name)}
+                        </div>
+                        <span className="text-[10px] text-violet-500 truncate">{conv.assigned_agent_name}</span>
+                      </div>
+                    )}
+
+                    {/* Labels en lista */}
+                    {conv.label_ids?.length > 0 && labels.length > 0 && (
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        {conv.label_ids.slice(0, 3).map(lid => {
+                          const lbl = labels.find(l => l.id === lid);
+                          if (!lbl) return null;
+                          return (
+                            <span key={lid} className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
+                              style={{ backgroundColor: lbl.color + '22', color: lbl.color }}>
+                              {lbl.name}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ── Panel de chat ───────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {!selected ? (
+          <div className="flex-1 flex items-center justify-center text-slate-400">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-200">
+                <MessageSquare size={32} className="text-slate-300" />
+              </div>
+              <p className="text-sm font-semibold text-slate-500">Selecciona una conversación</p>
+              <p className="text-xs text-slate-400 mt-1">Los mensajes aparecerán aquí</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Header */}
+            <div className="bg-white border-b border-slate-200 px-5 py-3 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                {/* Info izquierda */}
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5 ${
+                    selected.status === 'bot' ? 'bg-brand-500' : selected.status === 'human' ? 'bg-amber-500' : 'bg-slate-400'
+                  }`}>
+                    {selected.user_phone.slice(-2)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-900 text-sm truncate">{selected.contact_name || selected.user_phone}</p>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      {selected.contact_name && <span className="text-xs text-slate-400">{selected.user_phone}</span>}
+                      {user?.role === 'super_admin' && <span className="text-xs text-slate-400">{selected.company_name}</span>}
+                      <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[selected.status]}`}>
+                        <span className={`w-1 h-1 rounded-full ${STATUS_DOT[selected.status]}`} />
+                        {STATUS_LABELS[selected.status]}
+                      </span>
+                      {/* Agente asignado badge */}
+                      {selected.assigned_agent_name && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-600 border border-violet-200">
+                          <div className="w-2.5 h-2.5 rounded-full bg-violet-200 text-[7px] font-bold flex items-center justify-center">
+                            {avatarInitials(selected.assigned_agent_name)}
+                          </div>
+                          {selected.assigned_agent_name}
+                        </span>
+                      )}
+                    </div>
+                    {/* Labels */}
+                    <div className="mt-1.5">
+                      <LabelSelector
+                        conversation={selected}
+                        labels={labels}
+                        onLabelsChange={handleLabelsChange}
+                        companyId={companyId}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Acciones derecha */}
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                  {/* Asignar */}
+                  {agents.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowAssign(v => !v)}
+                        title="Asignar agente"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl border transition-colors font-semibold ${
+                          selected.assigned_to
+                            ? 'text-violet-600 border-violet-200 bg-violet-50 hover:bg-violet-100'
+                            : 'text-slate-500 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <UserPlus size={13} />
+                        {selected.assigned_agent_name || 'Asignar'}
+                        <ChevronDown size={11} />
+                      </button>
+                      {showAssign && (
+                        <AssignDropdown
+                          agents={agents}
+                          assigned={selected.assigned_to}
+                          currentUserId={user?.id}
+                          onAssign={handleAssign}
+                          onClose={() => setShowAssign(false)}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleRestartBot}
+                    title="Reiniciar bot"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-emerald-600 border border-emerald-200 rounded-xl hover:bg-emerald-50 transition-colors font-semibold"
+                  >
+                    <RotateCcw size={13} /> Reiniciar
+                  </button>
+                  {selected.status !== 'bot' && (
+                    <button onClick={() => handleStatus('bot')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-brand-600 border border-brand-200 rounded-xl hover:bg-brand-50 transition-colors font-semibold">
+                      <Bot size={13} /> Bot
+                    </button>
+                  )}
+                  {selected.status !== 'human' && (
+                    <button onClick={() => handleStatus('human')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-amber-600 border border-amber-200 rounded-xl hover:bg-amber-50 transition-colors font-semibold">
+                      <UserCheck size={13} /> Tomar
+                    </button>
+                  )}
+                  {selected.status !== 'closed' && (
+                    <button onClick={() => handleStatus('closed')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors font-semibold">
+                      <X size={13} /> Cerrar
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Mensajes */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+              {loadingMsgs ? (
+                <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                  <span className="w-5 h-5 border-2 border-slate-200 border-t-brand-500 rounded-full animate-spin mr-2" />
+                  Cargando...
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-slate-400 text-sm">Sin mensajes aún</div>
+              ) : (
+                messages.map(msg => {
+                  if (msg.is_note) {
+                    return (
+                      <div key={msg.id} className="flex justify-center">
+                        <div className="max-w-xs lg:max-w-md xl:max-w-lg w-full">
+                          <div className="bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5 relative">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <StickyNote size={11} className="text-amber-500 flex-shrink-0" />
+                              <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">Nota interna</span>
+                              <span className="text-[10px] text-amber-400 ml-auto">
+                                {msg.agent_name || 'Agente'} · {new Date(msg.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-sm text-amber-900 leading-relaxed">{msg.content}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const isOut = msg.direction === 'outbound';
+                  return (
+                    <div key={msg.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-xs lg:max-w-md xl:max-w-lg flex flex-col gap-1 ${isOut ? 'items-end' : 'items-start'}`}>
+                        <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                          isOut
+                            ? 'bg-brand-500 text-white rounded-br-sm shadow-sm shadow-brand-500/20'
+                            : 'bg-white text-slate-800 border border-slate-200 rounded-bl-sm shadow-sm'
+                        }`}>
+                          {msg.content}
+                        </div>
+                        <div className={`flex items-center gap-1 text-[10px] text-slate-400 ${isOut ? 'flex-row-reverse' : ''}`}>
+                          <span>{new Date(msg.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
+                          {isOut && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span>{msg.sent_by === 'agent' ? (msg.agent_name || 'Agente') : 'Bot'}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="bg-white border-t border-slate-200 px-4 py-3">
+              {selected.status === 'closed' ? (
+                <div className="flex items-center justify-center gap-3 py-1">
+                  <p className="text-sm text-slate-400">Conversación cerrada</p>
+                  <button onClick={handleRestartBot} className="text-xs text-emerald-600 font-semibold hover:underline flex items-center gap-1">
+                    <RotateCcw size={11} /> Reiniciar bot
+                  </button>
+                </div>
+              ) : selected.status === 'bot' ? (
+                <div className="space-y-2">
+                  {/* En modo bot también se puede dejar nota interna */}
+                  <div className="relative">
+                    {showTemplates && noteMode === false && (
+                      <TemplatePopover templates={templates} query={templateQuery} onSelect={handleTemplateSelect} onClose={() => setShowTemplates(false)} />
+                    )}
+                    {noteMode ? (
+                      <form onSubmit={handleSend} className="flex gap-2">
+                        <input
+                          ref={replyInputRef}
+                          type="text"
+                          value={reply}
+                          onChange={handleReplyChange}
+                          placeholder={inputPlaceholder}
+                          className="flex-1 px-4 py-2.5 text-sm border border-amber-300 bg-amber-50 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                          disabled={sending}
+                        />
+                        <button type="submit" disabled={!reply.trim() || sending}
+                          className="px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2 text-sm font-semibold">
+                          <StickyNote size={15} /> {sending ? '...' : 'Nota'}
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2 py-1 text-sm text-slate-400">
+                        <Bot size={15} className="text-brand-400" />
+                        El bot está manejando esta conversación.
+                        <button onClick={() => handleStatus('human')} className="text-amber-500 font-semibold hover:underline text-xs">
+                          Tomar control
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {/* Toggle nota */}
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => { setNoteMode(v => !v); setReply(''); setShowTemplates(false); }}
+                      className={`text-xs flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors ${
+                        noteMode ? 'bg-amber-100 text-amber-600 font-semibold' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'
+                      }`}
+                    >
+                      <StickyNote size={11} />
+                      {noteMode ? 'Cancelar nota' : 'Agregar nota interna'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="relative">
+                    {showTemplates && !noteMode && (
+                      <TemplatePopover templates={templates} query={templateQuery} onSelect={handleTemplateSelect} onClose={() => setShowTemplates(false)} />
+                    )}
+                    <form onSubmit={handleSend} className="flex gap-2">
+                      <input
+                        ref={replyInputRef}
+                        type="text"
+                        value={reply}
+                        onChange={handleReplyChange}
+                        placeholder={inputPlaceholder}
+                        className={`flex-1 px-4 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:border-transparent ${
+                          noteMode
+                            ? 'border-amber-300 bg-amber-50 focus:ring-amber-400'
+                            : 'border-slate-200 bg-slate-50 focus:ring-brand-400'
+                        }`}
+                        disabled={sending}
+                      />
+                      <button
+                        type="submit"
+                        disabled={!reply.trim() || sending}
+                        className={`px-4 py-2.5 text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2 text-sm font-semibold shadow-sm ${
+                          noteMode
+                            ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20'
+                            : 'bg-brand-500 hover:bg-brand-600 shadow-brand-500/20'
+                        }`}
+                      >
+                        {noteMode ? <StickyNote size={15} /> : <Send size={15} />}
+                        {sending ? '...' : noteMode ? 'Nota' : 'Enviar'}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Toggle nota / mensaje */}
+                  <div className="flex justify-between items-center">
+                    <button
+                      type="button"
+                      onClick={() => { setNoteMode(v => !v); setReply(''); setShowTemplates(false); }}
+                      className={`text-xs flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors ${
+                        noteMode ? 'bg-amber-100 text-amber-600 font-semibold' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'
+                      }`}
+                    >
+                      <StickyNote size={11} />
+                      {noteMode ? 'Cancelar nota · volver a mensaje' : 'Nota interna'}
+                    </button>
+                    {!noteMode && (
+                      <span className="text-[10px] text-slate-300">Escribe / para plantillas</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Panel de contacto ────────────────────────────────────────────────── */}
+      {selected && (
+        <ContactPanel
+          conversation={selected}
+          companyId={companyId}
+          onContactUpdated={(contact) => {
+            setSelected(prev => ({ ...prev, contact_name: contact.name }));
+            setConversations(prev => prev.map(c =>
+              c.id === selected.id ? { ...c, contact_name: contact.name } : c
+            ));
+          }}
+        />
+      )}
+    </div>
+  );
+}
