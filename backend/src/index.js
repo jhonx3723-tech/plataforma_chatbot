@@ -23,19 +23,7 @@ const PORT = process.env.PORT || 3001;
 // ── CORS ──────────────────────────────────────────────────────────────────────
 // ALLOWED_ORIGINS en producción: "https://tu-app.netlify.app"
 // En local se permite todo para facilitar el desarrollo.
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
-  : null;
-
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!allowedOrigins) return cb(null, true);
-    if (!origin)         return cb(null, true);
-    if (allowedOrigins.includes('*')) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: origen no permitido → ${origin}`));
-  },
-}));
+app.use(cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
