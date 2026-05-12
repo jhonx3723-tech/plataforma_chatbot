@@ -29,8 +29,9 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!allowedOrigins) return cb(null, true);        // dev: permitir todo
-    if (!origin)         return cb(null, true);        // apps móviles / curl
+    if (!allowedOrigins) return cb(null, true);
+    if (!origin)         return cb(null, true);
+    if (allowedOrigins.includes('*')) return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
     cb(new Error(`CORS: origen no permitido → ${origin}`));
   },
