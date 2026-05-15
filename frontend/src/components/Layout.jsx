@@ -1,17 +1,17 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Building2, MessageSquareMore, LogOut, Users, Inbox, KeyRound, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, Building2, MessageSquareMore, LogOut, Users, Inbox, KeyRound, BarChart2, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ChangePasswordModal from './ui/ChangePasswordModal';
 
 const ROLE_BADGE = {
-  super_admin:   { label: 'Super Admin', cls: 'bg-brand-500/20 text-brand-300 border-brand-500/30' },
-  client:        { label: 'Cliente',     cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
-  company_agent: { label: 'Agente',      cls: 'bg-violet-500/20 text-violet-300 border-violet-500/30' },
+  super_admin:   { label: 'Super Admin',  cls: 'bg-brand-500/20 text-brand-300 border-brand-500/30'     },
+  company_admin: { label: 'Administrador',cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+  company_agent: { label: 'Agente',       cls: 'bg-violet-500/20 text-violet-300 border-violet-500/30'   },
 };
 
 export default function Layout() {
-  const { user, logout, isSuperAdmin } = useAuth();
+  const { user, logout, isSuperAdmin, isCompanyAdmin } = useAuth();
   const navigate = useNavigate();
   const [showChangePwd, setShowChangePwd] = useState(false);
 
@@ -26,6 +26,9 @@ export default function Layout() {
       { to: '/companies', icon: Building2,       label: 'Empresas'         },
       { to: '/users',     icon: Users,           label: 'Usuarios'         },
       { to: '/reports',   icon: BarChart2,       label: 'Reportes'         },
+    ] : []),
+    ...(isCompanyAdmin ? [
+      { to: '/admin',     icon: ShieldCheck,     label: 'Panel Admin'      },
     ] : []),
     { to: '/inbox', icon: Inbox, label: 'Bandeja de entrada' },
   ];
@@ -80,7 +83,6 @@ export default function Layout() {
 
         {/* Perfil + acciones */}
         <div className="p-4 border-t border-slate-800 space-y-2">
-          {/* Info usuario */}
           <div className="flex items-center gap-3 px-1 mb-1">
             <div className="w-8 h-8 rounded-full bg-brand-500/20 border border-brand-500/30 text-brand-400 flex items-center justify-center font-bold text-sm flex-shrink-0">
               {user?.username?.[0]?.toUpperCase()}
@@ -96,18 +98,14 @@ export default function Layout() {
             </div>
           </div>
 
-          {/* Cambiar contraseña (clientes y agentes) */}
-          {!isSuperAdmin && (
-            <button
-              onClick={() => setShowChangePwd(true)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded-xl transition-colors border border-transparent hover:border-slate-700"
-            >
-              <KeyRound size={15} />
-              Cambiar contraseña
-            </button>
-          )}
+          <button
+            onClick={() => setShowChangePwd(true)}
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded-xl transition-colors border border-transparent hover:border-slate-700"
+          >
+            <KeyRound size={15} />
+            Cambiar contraseña
+          </button>
 
-          {/* Cerrar sesión */}
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors border border-transparent hover:border-red-500/20"

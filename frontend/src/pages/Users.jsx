@@ -7,9 +7,9 @@ import {
   ToggleLeft, ToggleRight, Mail, ShieldCheck, Users as UsersIcon,
 } from 'lucide-react';
 
-const ROLE_LABEL = { client: 'Cliente', company_agent: 'Agente' };
+const ROLE_LABEL = { company_admin: 'Administrador', company_agent: 'Agente' };
 const ROLE_COLOR = {
-  client:        'bg-brand-50 text-brand-700 border-brand-200',
+  company_admin: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   company_agent: 'bg-violet-50 text-violet-700 border-violet-200',
 };
 
@@ -20,7 +20,7 @@ export default function Users() {
   const [loading, setLoading]     = useState(true);
 
   const [showCreate, setShowCreate]   = useState(false);
-  const [form, setForm]               = useState({ username: '', email: '', password: '', company_id: '', role: 'client' });
+  const [form, setForm]               = useState({ username: '', email: '', password: '', company_id: '', role: 'company_agent' });
   const [saving, setSaving]           = useState(false);
 
   const [pwdModal, setPwdModal]   = useState(null);
@@ -54,7 +54,7 @@ export default function Users() {
     try {
       await usersAPI.create(form);
       toast.success(`${ROLE_LABEL[form.role]} creado correctamente`);
-      setForm({ username: '', email: '', password: '', company_id: '', role: 'client' });
+      setForm({ username: '', email: '', password: '', company_id: '', role: 'company_agent' });
       setShowCreate(false);
       load();
     } catch (err) {
@@ -102,8 +102,8 @@ export default function Users() {
     }
   }
 
-  const clients = users.filter(u => u.role === 'client');
-  const agents  = users.filter(u => u.role === 'company_agent');
+  const admins = users.filter(u => u.role === 'company_admin');
+  const agents = users.filter(u => u.role === 'company_agent');
 
   return (
     <div className="p-8 max-w-4xl">
@@ -130,8 +130,8 @@ export default function Users() {
           {/* Selector de rol */}
           <div className="flex gap-3 mb-5">
             {[
-              { key: 'client',        label: 'Cliente',         desc: 'Solo ve su bandeja',         icon: ShieldCheck },
-              { key: 'company_agent', label: 'Agente',          desc: 'Gestiona conversaciones',    icon: UserCircle2 },
+              { key: 'company_admin', label: 'Administrador', desc: 'Reportes y control de su empresa', icon: ShieldCheck },
+              { key: 'company_agent', label: 'Agente',        desc: 'Gestiona conversaciones',          icon: UserCircle2 },
             ].map(({ key, label, desc, icon: Icon }) => (
               <button
                 key={key}
@@ -211,14 +211,14 @@ export default function Users() {
         </div>
       ) : (
         <div className="space-y-8">
-          {/* Sección Clientes */}
+          {/* Sección Administradores */}
           <Section
-            title="Clientes"
+            title="Administradores"
             icon={ShieldCheck}
-            color="brand"
-            users={clients}
-            emptyText="No hay clientes creados"
-            emptyDesc="Crea un cliente para darle acceso a su bandeja de entrada"
+            color="emerald"
+            users={admins}
+            emptyText="No hay administradores creados"
+            emptyDesc="El administrador de empresa gestiona reportes y agentes"
             onReset={u => { setPwdModal(u); setNewPwd(''); }}
             onToggle={handleToggle}
             onDelete={u => setConfirmDelete(u)}
@@ -283,11 +283,11 @@ export default function Users() {
 }
 
 function Section({ title, icon: Icon, color, users, emptyText, emptyDesc, onReset, onToggle, onDelete }) {
-  const headerColor = color === 'brand'
-    ? 'text-brand-600 bg-brand-50 border-brand-100'
+  const headerColor = color === 'emerald'
+    ? 'text-emerald-600 bg-emerald-50 border-emerald-100'
     : 'text-violet-600 bg-violet-50 border-violet-100';
-  const avatarColor = color === 'brand'
-    ? 'bg-brand-500/10 border-brand-500/20 text-brand-600'
+  const avatarColor = color === 'emerald'
+    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'
     : 'bg-violet-500/10 border-violet-500/20 text-violet-600';
 
   return (

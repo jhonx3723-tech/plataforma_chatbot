@@ -8,9 +8,10 @@ import FlowEditor from './pages/FlowEditor';
 import Inbox from './pages/Inbox';
 import Users from './pages/Users';
 import Reports from './pages/Reports';
+import AdminPanel from './pages/AdminPanel';
 
-function ProtectedRoute({ children, adminOnly = false }) {
-  const { user, loading } = useAuth();
+function ProtectedRoute({ children, adminOnly = false, companyAdminAllowed = false }) {
+  const { user, loading, isSuperAdmin, isCompanyAdmin } = useAuth();
   if (loading) return (
     <div className="h-screen flex items-center justify-center bg-slate-900">
       <div className="flex flex-col items-center gap-3">
@@ -20,15 +21,22 @@ function ProtectedRoute({ children, adminOnly = false }) {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== 'super_admin') return <Navigate to="/inbox" replace />;
+  if (adminOnly && !isSuperAdmin) {
+    if (isCompanyAdmin) return <Navigate to="/admin" replace />;
+    return <Navigate to="/inbox" replace />;
+  }
+  if (companyAdminAllowed && !isSuperAdmin && !isCompanyAdmin)
+    return <Navigate to="/inbox" replace />;
   return children;
 }
 
 function PublicRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isSuperAdmin, isCompanyAdmin } = useAuth();
   if (loading) return null;
   if (!user) return children;
-  return <Navigate to={user.role === 'super_admin' ? '/dashboard' : '/inbox'} replace />;
+  if (isSuperAdmin)    return <Navigate to="/dashboard" replace />;
+  if (isCompanyAdmin)  return <Navigate to="/admin" replace />;
+  return <Navigate to="/inbox" replace />;
 }
 
 export default function App() {
@@ -42,9 +50,10 @@ export default function App() {
           <Route path="companies" element={<ProtectedRoute adminOnly><Companies /></ProtectedRoute>} />
           <Route path="users"     element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
           <Route path="reports"   element={<ProtectedRoute adminOnly><Reports /></ProtectedRoute>} />
+          <Route path="admin"     element={<ProtectedRoute companyAdminAllowed><AdminPanel /></ProtectedRoute>} />
           <Route path="inbox"     element={<Inbox />} />
         </Route>
-        <Route path="/flows/:flowId" element={<ProtectedRoute adminOnly><FlowEditor /></ProtectedRoute>} />
+        <Route path="/flows/:flowId" element={<ProtectedRoute companyAdminAllowed><FlowEditor /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AuthProvider>

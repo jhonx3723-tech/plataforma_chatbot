@@ -40,9 +40,9 @@ export function AuthProvider({ children }) {
       logout,
       refreshUser,
       loading,
-      isSuperAdmin: user?.role === 'super_admin',
-      isClient:     user?.role === 'client',
-      isAgent:      user?.role === 'company_agent',
+      isSuperAdmin:   user?.role === 'super_admin',
+      isCompanyAdmin: user?.role === 'company_admin',
+      isAgent:        user?.role === 'company_agent',
     }}>
       {children}
     </AuthContext.Provider>

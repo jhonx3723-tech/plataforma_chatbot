@@ -1,6 +1,6 @@
 const express = require('express');
 const supabase = require('../supabase');
-const { authMiddleware, requireSuperAdmin } = require('../middleware/auth');
+const { authMiddleware, requireSuperAdmin, requireCompanyAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -115,6 +115,86 @@ router.get('/count', authMiddleware, requireSuperAdmin, async (req, res) => {
   ]);
 
   res.json({ conversations: convs || 0, messages: msgs || 0 });
+});
+
+// Dashboard de reportes para company_admin (y super_admin con company_id)
+router.get('/admin/stats', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  const isSuper    = req.user.role === 'super_admin';
+  const companyId  = isSuper ? req.query.company_id : req.user.company_id;
+  if (!companyId)  return res.status(400).json({ error: 'company_id requerido' });
+
+  const days   = Math.min(parseInt(req.query.period) || 30, 90);
+  const from   = new Date();
+  from.setDate(from.getDate() - (days - 1));
+  from.setHours(0, 0, 0, 0);
+  const fromISO = from.toISOString();
+
+  const [
+    { data: recentConvs },
+    { data: allConvs },
+    { data: agentMsgs },
+    { data: agents },
+  ] = await Promise.all([
+    supabase.from('conversations')
+      .select('created_at, status')
+      .eq('company_id', companyId)
+      .gte('created_at', fromISO),
+    supabase.from('conversations')
+      .select('status')
+      .eq('company_id', companyId),
+    supabase.from('messages')
+      .select('agent_name, sent_by, conversation_id')
+      .eq('company_id', companyId)
+      .eq('direction', 'outbound')
+      .neq('sent_by', 'bot')
+      .gte('created_at', fromISO),
+    supabase.from('users')
+      .select('id, username')
+      .eq('company_id', companyId)
+      .eq('role', 'company_agent'),
+  ]);
+
+  // Mapa de días
+  const dayMap = {};
+  for (let i = 0; i < days; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - (days - 1 - i));
+    dayMap[d.toISOString().slice(0, 10)] = 0;
+  }
+  (recentConvs || []).forEach(c => {
+    const day = c.created_at.slice(0, 10);
+    if (day in dayMap) dayMap[day]++;
+  });
+
+  // Por estado
+  const byStatus = { open: 0, pending: 0, closed: 0, bot: 0 };
+  (allConvs || []).forEach(c => {
+    if (c.status in byStatus) byStatus[c.status]++;
+  });
+
+  const today      = new Date().toISOString().slice(0, 10);
+  const todayCount = dayMap[today] || 0;
+
+  // Por agente
+  const agentMap = {};
+  (agentMsgs || []).forEach(m => {
+    const name = m.agent_name || m.sent_by || 'Sin nombre';
+    if (!agentMap[name]) agentMap[name] = { messages: 0, convs: new Set() };
+    agentMap[name].messages++;
+    if (m.conversation_id) agentMap[name].convs.add(m.conversation_id);
+  });
+  const byAgent = Object.entries(agentMap)
+    .map(([name, d]) => ({ name, messages: d.messages, conversations: d.convs.size }))
+    .sort((a, b) => b.messages - a.messages)
+    .slice(0, 10);
+
+  res.json({
+    totals:    { total: (allConvs || []).length, today: todayCount, ...byStatus },
+    by_day:    Object.entries(dayMap).map(([date, count]) => ({ date, count })),
+    by_status: byStatus,
+    by_agent:  byAgent,
+    agents:    (agents || []).map(a => ({ id: a.id, username: a.username })),
+  });
 });
 
 module.exports = router;

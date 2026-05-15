@@ -22,8 +22,15 @@ function requireSuperAdmin(req, res, next) {
   next();
 }
 
+function requireCompanyAdmin(req, res, next) {
+  if (!['super_admin', 'company_admin'].includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Acceso restringido a administradores' });
+  }
+  next();
+}
+
 function signToken(payload) {
   return jwt.sign(payload, SECRET, { expiresIn: '8h' });
 }
 
-module.exports = { authMiddleware, requireSuperAdmin, signToken };
+module.exports = { authMiddleware, requireSuperAdmin, requireCompanyAdmin, signToken };

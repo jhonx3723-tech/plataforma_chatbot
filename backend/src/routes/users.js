@@ -1,10 +1,11 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const supabase = require('../supabase');
-const { authMiddleware, requireSuperAdmin } = require('../middleware/auth');
+const { authMiddleware, requireSuperAdmin, requireCompanyAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Super admin: todos los usuarios (sin super_admins)
 router.get('/', authMiddleware, requireSuperAdmin, async (req, res) => {
   const { data: users, error } = await supabase
     .from('users')
@@ -25,20 +26,48 @@ router.get('/', authMiddleware, requireSuperAdmin, async (req, res) => {
   })));
 });
 
-router.post('/', authMiddleware, requireSuperAdmin, async (req, res) => {
-  const { username, email, password, company_id, role = 'client' } = req.body;
+// Company admin: solo sus agentes
+router.get('/my-agents', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  const companyId = req.user.role === 'super_admin'
+    ? req.query.company_id
+    : req.user.company_id;
+  if (!companyId) return res.status(400).json({ error: 'company_id requerido' });
 
-  if (!username || !password || !company_id)
-    return res.status(400).json({ error: 'Usuario, contraseña y empresa son requeridos' });
+  const { data: users, error } = await supabase
+    .from('users')
+    .select('id, username, email, active, role, created_at')
+    .eq('company_id', companyId)
+    .eq('role', 'company_agent')
+    .order('created_at');
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(users);
+});
+
+// Crear usuario — super_admin puede crear company_admin y company_agent; company_admin solo puede crear agentes de su empresa
+router.post('/', authMiddleware, async (req, res) => {
+  const caller = req.user;
+  const { username, email, password, company_id, role = 'company_agent' } = req.body;
+
+  if (!['super_admin', 'company_admin'].includes(caller.role))
+    return res.status(403).json({ error: 'Sin permiso' });
+
+  if (!username || !password)
+    return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
   if (password.length < 6)
     return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
-  if (!['client', 'company_agent'].includes(role))
+
+  const allowedRoles = caller.role === 'super_admin'
+    ? ['company_agent', 'company_admin']
+    : ['company_agent'];
+  if (!allowedRoles.includes(role))
     return res.status(400).json({ error: 'Rol inválido' });
-  if (role === 'client' && !email)
-    return res.status(400).json({ error: 'El correo es requerido para clientes' });
+
+  const targetCompany = caller.role === 'super_admin' ? company_id : caller.company_id;
+  if (!targetCompany) return res.status(400).json({ error: 'Empresa requerida' });
 
   const { data: company } = await supabase
-    .from('companies').select('id').eq('id', company_id).single();
+    .from('companies').select('id').eq('id', targetCompany).single();
   if (!company) return res.status(404).json({ error: 'Empresa no encontrada' });
 
   const { data: dupUser } = await supabase
@@ -51,17 +80,17 @@ router.post('/', authMiddleware, requireSuperAdmin, async (req, res) => {
     if (dupEmail?.length) return res.status(409).json({ error: 'Ese correo ya está registrado' });
   }
 
-  if (role === 'client') {
+  if (role === 'company_admin') {
     const { data: existing } = await supabase
-      .from('users').select('id').eq('company_id', company_id).eq('role', 'client').limit(1);
-    if (existing?.length) return res.status(409).json({ error: 'Esta empresa ya tiene un cliente asignado' });
+      .from('users').select('id').eq('company_id', targetCompany).eq('role', 'company_admin').limit(1);
+    if (existing?.length) return res.status(409).json({ error: 'Esta empresa ya tiene un administrador asignado' });
   }
 
   if (role === 'company_agent') {
     const { data: existing } = await supabase
-      .from('users').select('id').eq('company_id', company_id).eq('role', 'company_agent');
-    if ((existing?.length || 0) >= 5)
-      return res.status(409).json({ error: 'Esta empresa ya tiene el máximo de 5 agentes' });
+      .from('users').select('id').eq('company_id', targetCompany).eq('role', 'company_agent');
+    if ((existing?.length || 0) >= 10)
+      return res.status(409).json({ error: 'Esta empresa ya tiene el máximo de 10 agentes' });
   }
 
   const { data, error } = await supabase
@@ -71,26 +100,33 @@ router.post('/', authMiddleware, requireSuperAdmin, async (req, res) => {
       email:      email ? email.toLowerCase().trim() : null,
       password:   await bcrypt.hash(password, 10),
       role,
-      company_id,
+      company_id: targetCompany,
       active:     true,
     })
     .select()
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
-
   const { password: _, ...clean } = data;
   res.status(201).json(clean);
 });
 
-router.put('/:id/password', authMiddleware, requireSuperAdmin, async (req, res) => {
+// Restablecer contraseña — super_admin cualquiera, company_admin solo sus agentes
+router.put('/:id/password', authMiddleware, async (req, res) => {
   const { password } = req.body;
   if (!password || password.length < 6)
     return res.status(400).json({ error: 'Mínimo 6 caracteres' });
 
   const { data: user } = await supabase
-    .from('users').select('id').eq('id', req.params.id).single();
+    .from('users').select('id, company_id, role').eq('id', req.params.id).single();
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  if (req.user.role === 'company_admin') {
+    if (user.company_id !== req.user.company_id || user.role !== 'company_agent')
+      return res.status(403).json({ error: 'Sin permiso' });
+  } else if (req.user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Sin permiso' });
+  }
 
   await supabase
     .from('users')
@@ -100,19 +136,39 @@ router.put('/:id/password', authMiddleware, requireSuperAdmin, async (req, res) 
   res.json({ success: true });
 });
 
-router.put('/:id/toggle', authMiddleware, requireSuperAdmin, async (req, res) => {
+// Activar/desactivar — super_admin cualquiera, company_admin solo sus agentes
+router.put('/:id/toggle', authMiddleware, async (req, res) => {
   const { data: user } = await supabase
-    .from('users').select('active').eq('id', req.params.id).single();
+    .from('users').select('active, company_id, role').eq('id', req.params.id).single();
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  if (req.user.role === 'company_admin') {
+    if (user.company_id !== req.user.company_id || user.role !== 'company_agent')
+      return res.status(403).json({ error: 'Sin permiso' });
+  } else if (req.user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Sin permiso' });
+  }
 
   const newActive = !user.active;
   await supabase.from('users').update({ active: newActive }).eq('id', req.params.id);
   res.json({ id: req.params.id, active: newActive });
 });
 
-router.delete('/:id', authMiddleware, requireSuperAdmin, async (req, res) => {
+// Eliminar — super_admin cualquiera, company_admin solo sus agentes
+router.delete('/:id', authMiddleware, async (req, res) => {
   if (req.params.id === req.user.id)
     return res.status(400).json({ error: 'No puedes eliminarte a ti mismo' });
+
+  const { data: user } = await supabase
+    .from('users').select('company_id, role').eq('id', req.params.id).single();
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  if (req.user.role === 'company_admin') {
+    if (user.company_id !== req.user.company_id || user.role !== 'company_agent')
+      return res.status(403).json({ error: 'Sin permiso' });
+  } else if (req.user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Sin permiso' });
+  }
 
   const { error } = await supabase.from('users').delete().eq('id', req.params.id);
   if (error) return res.status(404).json({ error: 'Usuario no encontrado' });

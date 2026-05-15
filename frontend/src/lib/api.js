@@ -103,3 +103,12 @@ export const authAPI = {
   login:          (username, password)   => api.post('/auth/login', { username, password }).then(r => r.data),
   changePassword: (current, newPassword) => api.put('/auth/password', { current, newPassword }).then(r => r.data),
 };
+
+export const adminAPI = {
+  getStats:    (params)          => api.get('/reports/admin/stats', { params }).then(r => r.data),
+  getMyAgents: (company_id)      => api.get('/users/my-agents', { params: { company_id } }).then(r => r.data),
+  createAgent: (data)            => api.post('/users', data).then(r => r.data),
+  toggleAgent: (id)              => api.put(`/users/${id}/toggle`).then(r => r.data),
+  resetAgentPwd: (id, password)  => api.put(`/users/${id}/password`, { password }).then(r => r.data),
+  deleteAgent: (id)              => api.delete(`/users/${id}`).then(r => r.data),
+};
