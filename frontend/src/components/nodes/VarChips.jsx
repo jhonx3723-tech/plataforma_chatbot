@@ -9,6 +9,7 @@ const COLOR_MAP = {
   green:  'bg-green-50 text-green-600 border-green-200 hover:bg-green-100',
   amber:  'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100',
   purple: 'bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100',
+  teal:   'bg-teal-50 text-teal-600 border-teal-200 hover:bg-teal-100',
 };
 
 export default function VarChips({ onInsert, color = 'blue' }) {

@@ -14,11 +14,13 @@ api.interceptors.request.use(config => {
 });
 
 export const companiesAPI = {
-  getAll: ()         => api.get('/companies').then(r => r.data),
-  get:    id         => api.get(`/companies/${id}`).then(r => r.data),
-  create: data       => api.post('/companies', data).then(r => r.data),
-  update: (id, data) => api.put(`/companies/${id}`, data).then(r => r.data),
-  remove: id         => api.delete(`/companies/${id}`).then(r => r.data),
+  getAll:          ()          => api.get('/companies').then(r => r.data),
+  get:             id          => api.get(`/companies/${id}`).then(r => r.data),
+  create:          data        => api.post('/companies', data).then(r => r.data),
+  update:          (id, data)  => api.put(`/companies/${id}`, data).then(r => r.data),
+  remove:          id          => api.delete(`/companies/${id}`).then(r => r.data),
+  getWAProfile:    id          => api.get(`/companies/${id}/wa-profile`).then(r => r.data),
+  updateWAProfile: (id, data)  => api.put(`/companies/${id}/wa-profile`, data).then(r => r.data),
 };
 
 export const flowsAPI = {
@@ -30,7 +32,7 @@ export const flowsAPI = {
 };
 
 export const conversationsAPI = {
-  getAll:     (params)      => api.get('/conversations', { params }).then(r => r.data),
+  getAll:     (params)      => api.get('/conversations', { params }).then(r => r.data), // { data, total, hasMore }
   get:        id            => api.get(`/conversations/${id}`).then(r => r.data),
   reply:      (id, message) => api.post(`/conversations/${id}/reply`, { message }).then(r => r.data),
   addNote:    (id, content) => api.post(`/conversations/${id}/note`, { content }).then(r => r.data),
@@ -38,6 +40,14 @@ export const conversationsAPI = {
   assign:     (id, user_id) => api.put(`/conversations/${id}/assign`, { user_id }).then(r => r.data),
   restartBot: id            => api.post(`/conversations/${id}/restart-bot`).then(r => r.data),
   getAgents:  (company_id)  => api.get('/conversations/agents', { params: { company_id } }).then(r => r.data),
+  sendImage:  (id, file, caption = '') => {
+    const form = new FormData();
+    form.append('file', file);
+    if (caption) form.append('caption', caption);
+    return api.post(`/conversations/${id}/send-image`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
 };
 
 export const dashboardAPI = {

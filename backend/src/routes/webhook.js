@@ -98,6 +98,16 @@ router.post('/whatsapp/:companyId', async (req, res) => {
       .limit(1);
     let session = sessions?.[0];
 
+    // Expirar sesión inactiva por más de 30 minutos
+    if (session) {
+      const lastActivity = new Date(session.updated_at || session.created_at);
+      const minutesIdle  = (Date.now() - lastActivity.getTime()) / 60000;
+      if (minutesIdle > 30) {
+        await supabase.from('sessions').delete().eq('id', session.id);
+        session = null;
+      }
+    }
+
     if (!session) {
       const startNode = nodes.find(n => n.type === 'start');
       if (!startNode) return;
@@ -120,9 +130,9 @@ router.post('/whatsapp/:companyId', async (req, res) => {
 
       const nextEdge = edges.find(e => e.source === startNode.id && !e.sourceHandle);
       const nextNode = nextEdge ? nodes.find(n => n.id === nextEdge.target) : null;
-      if (nextNode?.type === 'options') {
-        const sentOpts = await dispatchNode(company, nextNode, edges, nodes, userPhone, vars);
-        if (sentOpts) await saveMessage(conv.id, company.id, 'outbound', sentOpts, 'bot');
+      if (nextNode?.type === 'options' || nextNode?.type === 'input') {
+        const sentNext = await dispatchNode(company, nextNode, edges, nodes, userPhone, vars);
+        if (sentNext) await saveMessage(conv.id, company.id, 'outbound', sentNext, 'bot');
         await updateSession(session.id, nextNode.id);
       } else if (nextNode) {
         await updateSession(session.id, nextNode.id);
@@ -132,6 +142,10 @@ router.post('/whatsapp/:companyId', async (req, res) => {
 
     if (session.contact_name && session.contact_name !== userPhone) {
       vars.nombre = session.contact_name;
+    }
+    // Inyectar variables capturadas por nodos input en sesiones anteriores
+    if (session.variables && Object.keys(session.variables).length > 0) {
+      Object.assign(vars, session.variables);
     }
 
     const currentNode = nodes.find(n => n.id === session.current_node_id);
@@ -144,11 +158,27 @@ router.post('/whatsapp/:companyId', async (req, res) => {
         o => o.id === userInput || o.label.toLowerCase() === userInput.toLowerCase()
       );
       if (!selected) {
+        const fallback = resolveVars('No entendí tu selección 🤔 Por favor elige una de las opciones disponibles:', vars);
+        if (company.whatsapp_phone_id && company.whatsapp_token)
+          await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, fallback);
+        await saveMessage(conv.id, company.id, 'outbound', fallback, 'bot');
         const sent = await dispatchNode(company, currentNode, edges, nodes, userPhone, vars);
         if (sent) await saveMessage(conv.id, company.id, 'outbound', sent, 'bot');
         return;
       }
       const edge = edges.find(e => e.source === currentNode.id && e.sourceHandle === selected.id);
+      nextNodeId = edge?.target;
+    } else if (currentNode.type === 'input') {
+      // Guardar la respuesta del usuario como variable de sesión
+      const varName = currentNode.data?.variable_name?.trim();
+      if (varName) {
+        const updatedVars = { ...(session.variables || {}), [varName]: userInput };
+        await supabase.from('sessions')
+          .update({ variables: updatedVars, updated_at: new Date().toISOString() })
+          .eq('id', session.id);
+        vars[varName] = userInput;
+      }
+      const edge = edges.find(e => e.source === currentNode.id && !e.sourceHandle);
       nextNodeId = edge?.target;
     } else {
       const edge = edges.find(e => e.source === currentNode.id && !e.sourceHandle);
@@ -165,9 +195,9 @@ router.post('/whatsapp/:companyId', async (req, res) => {
     if (nextNode.type === 'message') {
       const afterEdge = edges.find(e => e.source === nextNode.id && !e.sourceHandle);
       const afterNode = afterEdge ? nodes.find(n => n.id === afterEdge.target) : null;
-      if (afterNode?.type === 'options') {
-        const sentOpts = await dispatchNode(company, afterNode, edges, nodes, userPhone, vars);
-        if (sentOpts) await saveMessage(conv.id, company.id, 'outbound', sentOpts, 'bot');
+      if (afterNode?.type === 'options' || afterNode?.type === 'input') {
+        const sentAfter = await dispatchNode(company, afterNode, edges, nodes, userPhone, vars);
+        if (sentAfter) await saveMessage(conv.id, company.id, 'outbound', sentAfter, 'bot');
         await updateSession(session.id, afterNode.id);
         return;
       }
@@ -234,10 +264,10 @@ async function updateSession(sessionId, nodeId) {
 
 function resolveVars(text, vars) {
   if (!text) return text;
-  return text
-    .replace(/\{\{nombre\}\}/gi,   vars.nombre   || '')
-    .replace(/\{\{telefono\}\}/gi, vars.telefono  || '')
-    .replace(/\{\{empresa\}\}/gi,  vars.empresa   || '');
+  return text.replace(/\{\{(\w+)\}\}/gi, (_, key) => {
+    const val = vars[key] ?? vars[key.toLowerCase()];
+    return val !== undefined ? String(val) : '';
+  });
 }
 
 function isInBusinessHours(company) {
@@ -283,6 +313,9 @@ async function dispatchNode(company, node, edges, nodes, userPhone, vars = {}) {
       }
       return `[Opciones] ${body}`;
     }
+
+    case 'input':
+      return send(node.data.question || '¿Cuál es tu respuesta?');
 
     case 'transfer':
       return send(node.data.message || 'Te conectamos con un asesor, por favor espera.');

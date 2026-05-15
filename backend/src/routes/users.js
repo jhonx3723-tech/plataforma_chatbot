@@ -59,8 +59,9 @@ router.post('/', authMiddleware, requireSuperAdmin, async (req, res) => {
 
   if (role === 'company_agent') {
     const { data: existing } = await supabase
-      .from('users').select('id').eq('company_id', company_id).eq('role', 'company_agent').limit(1);
-    if (existing?.length) return res.status(409).json({ error: 'Esta empresa ya tiene un agente asignado' });
+      .from('users').select('id').eq('company_id', company_id).eq('role', 'company_agent');
+    if ((existing?.length || 0) >= 5)
+      return res.status(409).json({ error: 'Esta empresa ya tiene el máximo de 5 agentes' });
   }
 
   const { data, error } = await supabase

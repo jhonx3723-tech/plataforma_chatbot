@@ -1,8 +1,13 @@
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { CircleOff } from 'lucide-react';
+import VarChips from './VarChips';
 
 export default function EndNode({ id, data, selected }) {
   const { updateNodeData } = useReactFlow();
+
+  function insertVar(v) {
+    updateNodeData(id, { message: (data.message || '') + v });
+  }
 
   return (
     <div className={`bg-white rounded-xl shadow-sm border-2 min-w-[240px] transition-shadow ${selected ? 'border-red-500 shadow-md shadow-red-100' : 'border-red-300'}`}>
@@ -22,7 +27,8 @@ export default function EndNode({ id, data, selected }) {
           onChange={e => updateNodeData(id, { message: e.target.value })}
           placeholder="¡Gracias por contactarnos! Hasta pronto."
         />
-        <p className="text-xs text-red-400 mt-2">La sesión del usuario se cierra aquí.</p>
+        <VarChips onInsert={insertVar} color="purple" />
+        <p className="text-xs text-red-400 mt-1.5">La sesión del usuario se cierra aquí.</p>
       </div>
     </div>
   );

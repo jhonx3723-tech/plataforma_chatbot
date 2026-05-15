@@ -1,7 +1,17 @@
 const express = require('express');
+const multer  = require('multer');
 const supabase = require('../supabase');
 const { authMiddleware } = require('../middleware/auth');
-const { sendText } = require('../services/whatsapp');
+const { sendText, uploadMedia, sendImage } = require('../services/whatsapp');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Solo se permiten imágenes'));
+  },
+});
 
 const router = express.Router();
 
@@ -26,10 +36,14 @@ router.get('/agents', authMiddleware, async (req, res) => {
 
 // ── Listado de conversaciones ─────────────────────────────────────────────────
 router.get('/', authMiddleware, async (req, res) => {
+  const limit  = Math.min(50, parseInt(req.query.limit)  || 30);
+  const offset = Math.max(0,  parseInt(req.query.offset) || 0);
+
   let query = supabase
     .from('conversations')
-    .select('*, companies(name)')
-    .order('last_message_at', { ascending: false });
+    .select('*, companies(name)', { count: 'exact' })
+    .order('last_message_at', { ascending: false })
+    .range(offset, offset + limit - 1);
 
   if (req.user.role === 'company_agent') {
     query = query.eq('company_id', req.user.company_id);
@@ -37,7 +51,27 @@ router.get('/', authMiddleware, async (req, res) => {
     query = query.eq('company_id', req.query.company_id);
   }
 
-  const { data: convs, error } = await query;
+  if (req.query.search?.trim()) {
+    const q = req.query.search.trim();
+
+    // Buscar contactos cuyo nombre coincida para incluir sus teléfonos en los resultados
+    let contactQuery = supabase.from('contacts').select('phone').ilike('name', `%${q}%`);
+    if (req.user.role === 'company_agent') {
+      contactQuery = contactQuery.eq('company_id', req.user.company_id);
+    } else if (req.query.company_id) {
+      contactQuery = contactQuery.eq('company_id', req.query.company_id);
+    }
+    const { data: nameMatches } = await contactQuery;
+    const matchPhones = (nameMatches || []).map(c => c.phone);
+
+    const phoneFilter = matchPhones.length > 0
+      ? `,user_phone.in.(${matchPhones.join(',')})`
+      : '';
+
+    query = query.or(`user_phone.ilike.%${q}%,last_message.ilike.%${q}%${phoneFilter}`);
+  }
+
+  const { data: convs, error, count } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
   // Mensajes no leídos
@@ -77,13 +111,15 @@ router.get('/', authMiddleware, async (req, res) => {
     (agents || []).forEach(a => { agentMap[a.id] = a.username; });
   }
 
-  res.json(convs.map(c => ({
+  const data = convs.map(c => ({
     ...c,
-    company_name:       c.companies?.name || '—',
-    contact_name:       contactMap[`${c.company_id}:${c.user_phone}`] || null,
+    company_name:        c.companies?.name || '—',
+    contact_name:        contactMap[`${c.company_id}:${c.user_phone}`] || null,
     assigned_agent_name: c.assigned_to ? (agentMap[c.assigned_to] || null) : null,
-    unread:             unreadMap[c.id] || 0,
-  })));
+    unread:              unreadMap[c.id] || 0,
+  }));
+
+  res.json({ data, total: count || 0, hasMore: offset + limit < (count || 0) });
 });
 
 // ── Detalle de conversación ───────────────────────────────────────────────────
@@ -286,6 +322,58 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
     .single();
 
   res.json(updated);
+});
+
+// ── Enviar imagen ─────────────────────────────────────────────────────────────
+router.post('/:id/send-image', authMiddleware, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Imagen requerida' });
+
+  const { data: conv, error: convErr } = await supabase
+    .from('conversations').select('*').eq('id', req.params.id).single();
+  if (convErr) return res.status(404).json({ error: 'Conversación no encontrada' });
+
+  if (req.user.role === 'company_agent' && conv.company_id !== req.user.company_id)
+    return res.status(403).json({ error: 'Sin acceso' });
+
+  const { data: company } = await supabase
+    .from('companies').select('whatsapp_phone_id, whatsapp_token').eq('id', conv.company_id).single();
+
+  if (!company?.whatsapp_phone_id || !company?.whatsapp_token)
+    return res.status(400).json({ error: 'La empresa no tiene WhatsApp configurado' });
+
+  try {
+    const mediaId = await uploadMedia(
+      company.whatsapp_phone_id, company.whatsapp_token,
+      req.file.buffer, req.file.mimetype
+    );
+    const caption = (req.body.caption || '').trim();
+    await sendImage(company.whatsapp_phone_id, company.whatsapp_token, conv.user_phone, mediaId, caption);
+
+    const content = caption ? `[Imagen] ${caption}` : '[Imagen]';
+    const now = new Date().toISOString();
+
+    const { data: msg, error: msgErr } = await supabase.from('messages').insert({
+      conversation_id: conv.id,
+      company_id:      conv.company_id,
+      direction:       'outbound',
+      content,
+      sent_by:         'agent',
+      agent_name:      req.user.username,
+      read:            true,
+      is_note:         false,
+    }).select().single();
+
+    if (msgErr) return res.status(500).json({ error: msgErr.message });
+
+    await supabase.from('conversations')
+      .update({ last_message: content, last_message_at: now, status: 'human' })
+      .eq('id', conv.id);
+
+    res.status(201).json(msg);
+  } catch (e) {
+    console.error('Error enviando imagen:', e.message);
+    res.status(500).json({ error: 'Error al enviar la imagen: ' + e.message });
+  }
 });
 
 module.exports = router;

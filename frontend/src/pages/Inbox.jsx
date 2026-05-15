@@ -3,7 +3,7 @@ import { conversationsAPI, templatesAPI, labelsAPI, API_BASE } from '../lib/api'
 import { useAuth } from '../context/AuthContext';
 import {
   Send, Bot, UserCheck, X, RefreshCw, Search, MessageSquare,
-  RotateCcw, UserPlus, StickyNote, ChevronDown, Check,
+  RotateCcw, UserPlus, StickyNote, ChevronDown, Check, Paperclip, Image,
 } from 'lucide-react';
 import ContactPanel from '../components/inbox/ContactPanel';
 import TemplatePopover from '../components/inbox/TemplatePopover';
@@ -122,6 +122,8 @@ export default function Inbox() {
   const [sending, setSending]             = useState(false);
   const [loadingConv, setLoadingConv]     = useState(true);
   const [loadingMsgs, setLoadingMsgs]     = useState(false);
+  const [loadingMore, setLoadingMore]     = useState(false);
+  const [hasMore, setHasMore]             = useState(false);
   const [filter, setFilter]               = useState('all');
   const [search, setSearch]               = useState('');
   const [realtimeStatus, setRealtimeStatus] = useState('connecting');
@@ -131,11 +133,16 @@ export default function Inbox() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [templateQuery, setTemplateQuery] = useState('');
   const [showAssign, setShowAssign]       = useState(false);
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching]         = useState(false);
+  const [imagePreview, setImagePreview]   = useState(null); // { file, url }
 
-  const messagesEndRef = useRef(null);
-  const pollRef        = useRef(null);
-  const selectedRef    = useRef(null);
-  const replyInputRef  = useRef(null);
+  const messagesEndRef  = useRef(null);
+  const pollRef         = useRef(null);
+  const selectedRef     = useRef(null);
+  const replyInputRef   = useRef(null);
+  const searchTimerRef  = useRef(null);
+  const fileInputRef    = useRef(null);
 
   selectedRef.current = selected;
 
@@ -160,16 +167,48 @@ export default function Inbox() {
 
   const loadConversations = useCallback(async () => {
     try {
-      const data = await conversationsAPI.getAll();
+      const res = await conversationsAPI.getAll({ limit: 30, offset: 0 });
+      const incoming = res.data ?? res;
+      setHasMore(res.hasMore ?? false);
       setConversations(prev => {
         const prevUnread = prev.reduce((a, c) => a + (c.unread || 0), 0);
-        const newUnread  = data.reduce((a, c) => a + (c.unread || 0), 0);
+        const newUnread  = incoming.reduce((a, c) => a + (c.unread || 0), 0);
         if (newUnread > prevUnread) playNotificationSound();
-        return data;
+        return incoming;
       });
     } catch { /* silent */ }
     finally { setLoadingConv(false); }
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await conversationsAPI.getAll({ limit: 30, offset: conversations.length });
+      const incoming = res.data ?? [];
+      setHasMore(res.hasMore ?? false);
+      setConversations(prev => {
+        const existingIds = new Set(prev.map(c => c.id));
+        return [...prev, ...incoming.filter(c => !existingIds.has(c.id))];
+      });
+    } catch { /* silent */ }
+    finally { setLoadingMore(false); }
+  }, [loadingMore, hasMore, conversations.length]);
+
+  // Búsqueda server-side con debounce — busca en toda la BD, no solo en los 30 cargados
+  useEffect(() => {
+    clearTimeout(searchTimerRef.current);
+    if (!search.trim()) { setSearchResults(null); setSearching(false); return; }
+    setSearching(true);
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await conversationsAPI.getAll({ limit: 50, search: search.trim() });
+        setSearchResults(res.data ?? res);
+      } catch { /* silent */ }
+      finally { setSearching(false); }
+    }, 400);
+    return () => clearTimeout(searchTimerRef.current);
+  }, [search]);
 
   const loadMessages = useCallback(async (id) => {
     try {
@@ -179,6 +218,13 @@ export default function Inbox() {
       setConversations(prev => prev.map(c => c.id === id ? { ...c, unread: 0 } : c));
     } catch { /* silent */ }
     finally { setLoadingMsgs(false); }
+  }, []);
+
+  // Solicitar permiso de notificaciones al cargar el inbox
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
   }, []);
 
   // SSE — realtime
@@ -219,6 +265,7 @@ export default function Inbox() {
               ? { ...c, last_message: msg.content, last_message_at: msg.created_at, unread: (c.unread || 0) + 1 }
               : c
           ));
+          showBrowserNotification(msg.conversation_id, 'Nuevo mensaje de cliente', msg.content);
         }
       }
     });
@@ -263,6 +310,46 @@ export default function Inbox() {
     setShowTemplates(false);
     setTemplateQuery('');
     replyInputRef.current?.focus();
+  }
+
+  // ── Notificaciones del navegador ────────────────────────────────────────────
+  function showBrowserNotification(convId, title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const n = new Notification(title, {
+      body: body?.slice(0, 100) || 'Nuevo mensaje',
+      icon: '/favicon.ico',
+      tag: `conv-${convId}`,
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+    setTimeout(() => n.close(), 6000);
+  }
+
+  // ── Imagen adjunta ──────────────────────────────────────────────────────────
+  function handleImageSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImagePreview({ file, url: URL.createObjectURL(file) });
+    e.target.value = '';
+  }
+
+  function cancelImage() {
+    if (imagePreview) URL.revokeObjectURL(imagePreview.url);
+    setImagePreview(null);
+  }
+
+  async function handleSendImage() {
+    if (!imagePreview || !selected) return;
+    setSending(true);
+    try {
+      const msg = await conversationsAPI.sendImage(selected.id, imagePreview.file);
+      setMessages(prev => [...prev, msg]);
+      setSelected(prev => ({ ...prev, status: 'human' }));
+      setConversations(prev => prev.map(c =>
+        c.id === selected.id ? { ...c, status: 'human', last_message: '[Imagen]', last_message_at: msg.created_at } : c
+      ));
+      cancelImage();
+    } catch { /* silent */ }
+    finally { setSending(false); }
   }
 
   async function handleSend(e) {
@@ -321,12 +408,16 @@ export default function Inbox() {
     if (newLabelsArray) setLabels(newLabelsArray);
   }
 
-  const filteredConvs = conversations.filter(c => {
+  // Cuando hay búsqueda activa con resultados del servidor, usarlos como base;
+  // mientras la búsqueda está pendiente (timer aún corriendo), usar lista local como fallback.
+  const baseList = (search.trim() && searchResults !== null) ? searchResults : conversations;
+  const filteredConvs = baseList.filter(c => {
     if (filter === 'mine')   return c.assigned_to === user?.id;
     if (filter !== 'all')    return c.status === filter;
     return true;
   }).filter(c => {
-    if (!search) return true;
+    if (!search.trim() || searchResults !== null) return true;
+    // fallback local mientras el servidor responde
     return c.user_phone.includes(search) ||
       (c.contact_name || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -367,15 +458,26 @@ export default function Inbox() {
           </div>
 
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            {searching ? (
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-slate-200 border-t-brand-500 rounded-full animate-spin" />
+            ) : (
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            )}
             <input
               type="text"
-              placeholder="Buscar conversación..."
+              placeholder="Buscar por nombre, teléfono o mensaje..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent placeholder:text-slate-400"
             />
           </div>
+          {search.trim() && searchResults !== null && (
+            <p className="text-[10px] text-slate-400 mt-1.5 text-center">
+              {searchResults.length === 0
+                ? 'Sin resultados en toda la base de datos'
+                : `${searchResults.length} resultado${searchResults.length !== 1 ? 's' : ''} encontrado${searchResults.length !== 1 ? 's' : ''}`}
+            </p>
+          )}
         </div>
 
         {/* Filter tabs */}
@@ -400,7 +502,7 @@ export default function Inbox() {
         </div>
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-50 flex flex-col">
           {loadingConv ? (
             <div className="p-4 space-y-3">
               {[1, 2, 3].map(i => (
@@ -420,78 +522,88 @@ export default function Inbox() {
               {search && <button onClick={() => setSearch('')} className="text-xs text-brand-500 mt-1 hover:underline">Limpiar búsqueda</button>}
             </div>
           ) : (
-            filteredConvs.map(conv => (
-              <button
-                key={conv.id}
-                onClick={() => selectConversation(conv)}
-                className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors ${
-                  selected?.id === conv.id ? 'bg-brand-50 border-r-2 border-brand-500' : ''
-                }`}
-              >
-                <div className="flex items-start gap-2.5">
-                  {/* Avatar */}
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${
-                    conv.status === 'bot' ? 'bg-brand-500' : conv.status === 'human' ? 'bg-amber-500' : 'bg-slate-400'
-                  }`}>
-                    {conv.user_phone.slice(-2)}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <p className={`text-sm font-semibold truncate ${selected?.id === conv.id ? 'text-brand-700' : 'text-slate-900'}`}>
-                        {conv.contact_name || conv.user_phone}
-                      </p>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {conv.unread > 0 && (
-                          <span className="w-4 h-4 bg-brand-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
-                            {conv.unread > 9 ? '9+' : conv.unread}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-slate-400">{formatTime(conv.last_message_at)}</span>
-                      </div>
+            <>
+              {filteredConvs.map(conv => (
+                <button
+                  key={conv.id}
+                  onClick={() => selectConversation(conv)}
+                  className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors ${
+                    selected?.id === conv.id ? 'bg-brand-50 border-r-2 border-brand-500' : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${
+                      conv.status === 'bot' ? 'bg-brand-500' : conv.status === 'human' ? 'bg-amber-500' : 'bg-slate-400'
+                    }`}>
+                      {conv.user_phone.slice(-2)}
                     </div>
 
-                    {conv.contact_name && (
-                      <p className="text-[10px] text-slate-400 truncate">{conv.user_phone}</p>
-                    )}
-
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold border flex-shrink-0 ${STATUS_COLORS[conv.status]}`}>
-                        <span className={`w-1 h-1 rounded-full ${STATUS_DOT[conv.status]}`} />
-                        {STATUS_LABELS[conv.status]}
-                      </span>
-                      <p className="text-xs text-slate-400 truncate flex-1">{conv.last_message}</p>
-                    </div>
-
-                    {/* Agente asignado en lista */}
-                    {conv.assigned_agent_name && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <div className="w-3.5 h-3.5 rounded-full bg-violet-100 text-violet-600 text-[8px] font-bold flex items-center justify-center">
-                          {avatarInitials(conv.assigned_agent_name)}
-                        </div>
-                        <span className="text-[10px] text-violet-500 truncate">{conv.assigned_agent_name}</span>
-                      </div>
-                    )}
-
-                    {/* Labels en lista */}
-                    {conv.label_ids?.length > 0 && labels.length > 0 && (
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        {conv.label_ids.slice(0, 3).map(lid => {
-                          const lbl = labels.find(l => l.id === lid);
-                          if (!lbl) return null;
-                          return (
-                            <span key={lid} className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
-                              style={{ backgroundColor: lbl.color + '22', color: lbl.color }}>
-                              {lbl.name}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <p className={`text-sm font-semibold truncate ${selected?.id === conv.id ? 'text-brand-700' : 'text-slate-900'}`}>
+                          {conv.contact_name || conv.user_phone}
+                        </p>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {conv.unread > 0 && (
+                            <span className="w-4 h-4 bg-brand-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                              {conv.unread > 9 ? '9+' : conv.unread}
                             </span>
-                          );
-                        })}
+                          )}
+                          <span className="text-[10px] text-slate-400">{formatTime(conv.last_message_at)}</span>
+                        </div>
                       </div>
-                    )}
+
+                      {conv.contact_name && (
+                        <p className="text-[10px] text-slate-400 truncate">{conv.user_phone}</p>
+                      )}
+
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold border flex-shrink-0 ${STATUS_COLORS[conv.status]}`}>
+                          <span className={`w-1 h-1 rounded-full ${STATUS_DOT[conv.status]}`} />
+                          {STATUS_LABELS[conv.status]}
+                        </span>
+                        <p className="text-xs text-slate-400 truncate flex-1">{conv.last_message}</p>
+                      </div>
+
+                      {conv.assigned_agent_name && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <div className="w-3.5 h-3.5 rounded-full bg-violet-100 text-violet-600 text-[8px] font-bold flex items-center justify-center">
+                            {avatarInitials(conv.assigned_agent_name)}
+                          </div>
+                          <span className="text-[10px] text-violet-500 truncate">{conv.assigned_agent_name}</span>
+                        </div>
+                      )}
+
+                      {conv.label_ids?.length > 0 && labels.length > 0 && (
+                        <div className="flex gap-1 mt-1 flex-wrap">
+                          {conv.label_ids.slice(0, 3).map(lid => {
+                            const lbl = labels.find(l => l.id === lid);
+                            if (!lbl) return null;
+                            return (
+                              <span key={lid} className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
+                                style={{ backgroundColor: lbl.color + '22', color: lbl.color }}>
+                                {lbl.name}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </button>
-            ))
+                </button>
+              ))}
+              {!search.trim() && hasMore && (
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="w-full py-3 text-xs text-brand-500 hover:bg-brand-50 transition-colors font-semibold flex items-center justify-center gap-2 flex-shrink-0"
+                >
+                  {loadingMore ? (
+                    <><span className="w-3 h-3 border-2 border-brand-300 border-t-brand-500 rounded-full animate-spin" /> Cargando...</>
+                  ) : 'Cargar más conversaciones'}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -665,6 +777,28 @@ export default function Inbox() {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Preview de imagen adjunta */}
+            {imagePreview && (
+              <div className="bg-slate-50 border-t border-slate-100 px-4 py-2.5 flex items-center gap-3">
+                <img src={imagePreview.url} alt="preview" className="w-12 h-12 object-cover rounded-lg border border-slate-200 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-700">Imagen lista para enviar</p>
+                  <p className="text-[10px] text-slate-400 truncate">{imagePreview.file.name}</p>
+                </div>
+                <button
+                  onClick={handleSendImage}
+                  disabled={sending}
+                  className="px-3 py-1.5 text-xs bg-brand-500 text-white rounded-lg font-semibold hover:bg-brand-600 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+                >
+                  <Send size={11} />
+                  {sending ? 'Enviando...' : 'Enviar'}
+                </button>
+                <button onClick={cancelImage} className="p-1 text-slate-400 hover:text-red-400 transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             {/* Input */}
             <div className="bg-white border-t border-slate-200 px-4 py-3">
               {selected.status === 'closed' ? (
@@ -741,6 +875,25 @@ export default function Inbox() {
                         }`}
                         disabled={sending}
                       />
+                      {!noteMode && (
+                        <>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            hidden
+                            onChange={handleImageSelect}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            title="Adjuntar imagen"
+                            className="px-3 py-2.5 text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-100 hover:text-slate-600 transition-colors flex-shrink-0"
+                          >
+                            <Paperclip size={15} />
+                          </button>
+                        </>
+                      )}
                       <button
                         type="submit"
                         disabled={!reply.trim() || sending}

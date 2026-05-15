@@ -11,7 +11,7 @@ import {
   Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Save, ArrowLeft, Plus, MessageSquare, ListChecks, PhoneForwarded, CircleOff, PlayCircle } from 'lucide-react';
+import { Save, ArrowLeft, Plus, MessageSquare, ListChecks, PhoneForwarded, CircleOff, PlayCircle, Keyboard } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { flowsAPI } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
@@ -20,13 +20,15 @@ import MessageNode from '../components/nodes/MessageNode';
 import OptionsNode from '../components/nodes/OptionsNode';
 import TransferNode from '../components/nodes/TransferNode';
 import EndNode from '../components/nodes/EndNode';
+import InputNode from '../components/nodes/InputNode';
 
 const nodeTypes = {
-  start: StartNode,
+  start:   StartNode,
   message: MessageNode,
   options: OptionsNode,
+  input:   InputNode,
   transfer: TransferNode,
-  end: EndNode,
+  end:     EndNode,
 };
 
 const defaultEdgeOptions = {
@@ -55,6 +57,13 @@ const NODE_TEMPLATES = [
         { id: uuidv4(), label: 'Opción 2' },
       ],
     },
+  },
+  {
+    type: 'input',
+    icon: Keyboard,
+    label: 'Capturar',
+    color: 'text-teal-600 bg-teal-50 hover:bg-teal-100',
+    defaultData: { label: 'Capturar respuesta', question: '¿Cuál es tu respuesta?', variable_name: 'respuesta' },
   },
   {
     type: 'transfer',
@@ -215,7 +224,7 @@ export default function FlowEditor() {
           <Controls />
           <MiniMap
             nodeColor={n => {
-              const colors = { start: '#22c55e', message: '#3b82f6', options: '#f59e0b', transfer: '#a855f7', end: '#ef4444' };
+              const colors = { start: '#22c55e', message: '#3b82f6', options: '#f59e0b', input: '#14b8a6', transfer: '#a855f7', end: '#ef4444' };
               return colors[n.type] || '#94a3b8';
             }}
             maskColor="rgba(255,255,255,0.8)"
@@ -240,11 +249,12 @@ export default function FlowEditor() {
       <footer className="flex-shrink-0 bg-white border-t border-gray-200 px-5 py-2 flex items-center gap-5 text-xs text-gray-400">
         <span className="font-medium text-gray-600">Leyenda:</span>
         {[
-          { color: 'bg-green-400', label: 'Inicio' },
-          { color: 'bg-blue-400', label: 'Mensaje' },
-          { color: 'bg-amber-400', label: 'Opciones' },
+          { color: 'bg-green-400',  label: 'Inicio' },
+          { color: 'bg-blue-400',   label: 'Mensaje' },
+          { color: 'bg-amber-400',  label: 'Opciones' },
+          { color: 'bg-teal-400',   label: 'Capturar' },
           { color: 'bg-purple-400', label: 'Transferir' },
-          { color: 'bg-red-400', label: 'Fin' },
+          { color: 'bg-red-400',    label: 'Fin' },
         ].map(({ color, label }) => (
           <span key={label} className="flex items-center gap-1.5">
             <span className={`w-2.5 h-2.5 rounded-full ${color}`} />

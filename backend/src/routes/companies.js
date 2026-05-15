@@ -1,6 +1,8 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../supabase');
+const { authMiddleware, requireSuperAdmin } = require('../middleware/auth');
+const { getWAProfile, updateWAProfile } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -98,6 +100,48 @@ router.delete('/:id', async (req, res) => {
     .from('companies').delete().eq('id', req.params.id);
   if (error) return res.status(404).json({ error: 'Empresa no encontrada' });
   res.json({ success: true });
+});
+
+// ── Perfil público de WhatsApp Business ───────────────────────────────────────
+router.get('/:id/wa-profile', authMiddleware, requireSuperAdmin, async (req, res) => {
+  const { data: company } = await supabase
+    .from('companies').select('whatsapp_phone_id, whatsapp_token').eq('id', req.params.id).single();
+  if (!company) return res.status(404).json({ error: 'Empresa no encontrada' });
+  if (!company.whatsapp_phone_id || !company.whatsapp_token)
+    return res.status(400).json({ error: 'La empresa no tiene credenciales de WhatsApp configuradas' });
+
+  try {
+    const profile = await getWAProfile(company.whatsapp_phone_id, company.whatsapp_token);
+    res.json(profile);
+  } catch (e) {
+    const msg = e?.response?.data?.error?.message || e.message;
+    res.status(502).json({ error: msg });
+  }
+});
+
+router.put('/:id/wa-profile', authMiddleware, requireSuperAdmin, async (req, res) => {
+  const { data: company } = await supabase
+    .from('companies').select('whatsapp_phone_id, whatsapp_token').eq('id', req.params.id).single();
+  if (!company) return res.status(404).json({ error: 'Empresa no encontrada' });
+  if (!company.whatsapp_phone_id || !company.whatsapp_token)
+    return res.status(400).json({ error: 'La empresa no tiene credenciales de WhatsApp configuradas' });
+
+  const { about, description, address, email, websites, vertical } = req.body;
+  const patch = {};
+  if (about       !== undefined) patch.about       = about;
+  if (description !== undefined) patch.description = description;
+  if (address     !== undefined) patch.address     = address;
+  if (email       !== undefined) patch.email       = email;
+  if (websites    !== undefined) patch.websites    = websites;
+  if (vertical    !== undefined) patch.vertical    = vertical;
+
+  try {
+    await updateWAProfile(company.whatsapp_phone_id, company.whatsapp_token, patch);
+    res.json({ success: true });
+  } catch (e) {
+    const msg = e?.response?.data?.error?.message || e.message;
+    res.status(502).json({ error: msg });
+  }
 });
 
 module.exports = router;

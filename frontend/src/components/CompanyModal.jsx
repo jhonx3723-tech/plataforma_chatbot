@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Info, Building2, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Info, Building2, Clock, ChevronDown, ChevronUp, Smartphone, Download, RefreshCw } from 'lucide-react';
+import { companiesAPI } from '../lib/api';
 
 const DAYS = [
   { key: '1', label: 'Lunes'     },
@@ -38,9 +39,61 @@ export default function CompanyModal({ company, onClose, onSave }) {
     whatsapp_token:    company?.whatsapp_token    || '',
     business_hours:    initBH(company?.business_hours),
   });
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
   const [showHours, setShowHours] = useState(false);
+  const [showProfile, setShowProfile]       = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [savingProfile, setSavingProfile]   = useState(false);
+  const [profileMsg, setProfileMsg]         = useState(null); // { ok, text }
+  const [waProfile, setWaProfile] = useState({
+    about: '', description: '', address: '', email: '', website: '', vertical: 'OTHER',
+  });
+
+  const hasCredentials = !!(form.whatsapp_phone_id && form.whatsapp_token);
+
+  async function loadWAProfile() {
+    if (!company?.id) return;
+    setLoadingProfile(true);
+    setProfileMsg(null);
+    try {
+      const p = await companiesAPI.getWAProfile(company.id);
+      setWaProfile({
+        about:       p.about        || '',
+        description: p.description  || '',
+        address:     p.address      || '',
+        email:       p.email        || '',
+        website:     p.websites?.[0] || '',
+        vertical:    p.vertical     || 'OTHER',
+      });
+      setProfileMsg({ ok: true, text: 'Perfil cargado desde Meta ✓' });
+    } catch (e) {
+      setProfileMsg({ ok: false, text: e?.response?.data?.error || 'Error al cargar el perfil de Meta' });
+    } finally {
+      setLoadingProfile(false);
+    }
+  }
+
+  async function saveWAProfile() {
+    if (!company?.id || !hasCredentials) return;
+    setSavingProfile(true);
+    setProfileMsg(null);
+    try {
+      const payload = {};
+      if (waProfile.about)       payload.about       = waProfile.about;
+      if (waProfile.description) payload.description = waProfile.description;
+      if (waProfile.address)     payload.address     = waProfile.address;
+      if (waProfile.email)       payload.email       = waProfile.email;
+      if (waProfile.website)     payload.websites    = [waProfile.website];
+      if (waProfile.vertical)    payload.vertical    = waProfile.vertical;
+      await companiesAPI.updateWAProfile(company.id, payload);
+      setProfileMsg({ ok: true, text: 'Perfil actualizado en WhatsApp ✓' });
+    } catch (e) {
+      setProfileMsg({ ok: false, text: e?.response?.data?.error || 'Error al actualizar el perfil' });
+    } finally {
+      setSavingProfile(false);
+    }
+  }
 
   const set = key => e => setForm(f => ({ ...f, [key]: e.target.value }));
 
@@ -275,7 +328,173 @@ export default function CompanyModal({ company, onClose, onSave }) {
                 </span>
               ) : 'Guardar'}
             </button>
+            {/* Perfil de WhatsApp */}
+            <div className="border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={() => { setShowProfile(v => !v); setProfileMsg(null); }}
+                className="w-full flex items-center justify-between text-left group"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center">
+                    <Smartphone size={13} className="text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Perfil de WhatsApp</p>
+                    <p className="text-xs text-slate-400">Descripción, dirección y datos visibles a los clientes</p>
+                  </div>
+                </div>
+                {showProfile
+                  ? <ChevronUp size={16} className="text-slate-400" />
+                  : <ChevronDown size={16} className="text-slate-400" />}
+              </button>
+
+              {showProfile && (
+                <div className="mt-4 space-y-3">
+                  {!company ? (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-3 py-2.5 text-xs flex items-center gap-2">
+                      <Info size={12} className="flex-shrink-0" />
+                      Guarda primero la empresa para poder configurar su perfil de WhatsApp.
+                    </div>
+                  ) : !hasCredentials ? (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-3 py-2.5 text-xs flex items-center gap-2">
+                      <Info size={12} className="flex-shrink-0" />
+                      Configura el Phone Number ID y el Access Token antes de editar el perfil.
+                    </div>
+                  ) : (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={loadWAProfile}
+                        disabled={loadingProfile}
+                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-brand-200 text-brand-600 rounded-lg hover:bg-brand-50 disabled:opacity-40 transition-colors font-medium"
+                      >
+                        {loadingProfile
+                          ? <RefreshCw size={11} className="animate-spin" />
+                          : <Download size={11} />}
+                        Cargar perfil actual desde Meta
+                      </button>
+                    </div>
+                  )}
+
+                  {profileMsg && (
+                    <div className={`text-xs px-3 py-2 rounded-xl border ${
+                      profileMsg.ok
+                        ? 'bg-green-50 border-green-200 text-green-700'
+                        : 'bg-red-50 border-red-200 text-red-600'
+                    }`}>
+                      {profileMsg.text}
+                    </div>
+                  )}
+
+                  <Field label="Acerca de" hint="Máx. 256 caracteres — visible en el perfil del número">
+                    <input
+                      type="text"
+                      maxLength={256}
+                      value={waProfile.about}
+                      onChange={e => setWaProfile(p => ({ ...p, about: e.target.value }))}
+                      className="input"
+                      placeholder="Empresa de ventas en línea"
+                      disabled={!company || !hasCredentials}
+                    />
+                  </Field>
+
+                  <Field label="Descripción">
+                    <textarea
+                      rows={2}
+                      value={waProfile.description}
+                      onChange={e => setWaProfile(p => ({ ...p, description: e.target.value }))}
+                      className="input resize-none"
+                      placeholder="Descripción completa del negocio"
+                      disabled={!company || !hasCredentials}
+                    />
+                  </Field>
+
+                  <Field label="Dirección">
+                    <input
+                      type="text"
+                      value={waProfile.address}
+                      onChange={e => setWaProfile(p => ({ ...p, address: e.target.value }))}
+                      className="input"
+                      placeholder="Calle 123, Ciudad, País"
+                      disabled={!company || !hasCredentials}
+                    />
+                  </Field>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Email de contacto">
+                      <input
+                        type="email"
+                        value={waProfile.email}
+                        onChange={e => setWaProfile(p => ({ ...p, email: e.target.value }))}
+                        className="input"
+                        placeholder="contacto@empresa.com"
+                        disabled={!company || !hasCredentials}
+                      />
+                    </Field>
+                    <Field label="Sitio web">
+                      <input
+                        type="url"
+                        value={waProfile.website}
+                        onChange={e => setWaProfile(p => ({ ...p, website: e.target.value }))}
+                        className="input"
+                        placeholder="https://empresa.com"
+                        disabled={!company || !hasCredentials}
+                      />
+                    </Field>
+                  </div>
+
+                  <Field label="Categoría del negocio">
+                    <select
+                      value={waProfile.vertical}
+                      onChange={e => setWaProfile(p => ({ ...p, vertical: e.target.value }))}
+                      className="input"
+                      disabled={!company || !hasCredentials}
+                    >
+                      <option value="OTHER">Otro</option>
+                      <option value="AUTO">Automotriz</option>
+                      <option value="BEAUTY">Belleza y Spa</option>
+                      <option value="CLOTHING">Ropa y Moda</option>
+                      <option value="EDUCATION">Educación</option>
+                      <option value="ENTERTAINMENT">Entretenimiento</option>
+                      <option value="FINANCE">Finanzas y Banca</option>
+                      <option value="GROCERY">Supermercado</option>
+                      <option value="HOTEL">Hotel y Alojamiento</option>
+                      <option value="MEDICAL">Salud y Medicina</option>
+                      <option value="NON_PROFIT">Sin fines de lucro</option>
+                      <option value="PROFESSIONAL_SERVICES">Servicios Profesionales</option>
+                      <option value="RETAIL">Comercio al por menor</option>
+                      <option value="TRAVEL">Viajes y Transporte</option>
+                      <option value="RESTAURANT">Restaurante</option>
+                      <option value="TECHNOLOGY">Tecnología</option>
+                    </select>
+                  </Field>
+
+                  <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                    <Info size={10} />
+                    La foto de perfil se gestiona desde Meta Business Manager directamente.
+                  </p>
+
+                  {company && hasCredentials && (
+                    <button
+                      type="button"
+                      onClick={saveWAProfile}
+                      disabled={savingProfile}
+                      className="w-full py-2.5 text-sm font-semibold bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+                    >
+                      {savingProfile ? (
+                        <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Actualizando...</>
+                      ) : (
+                        <><Smartphone size={14} /> Actualizar perfil en WhatsApp</>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
           </div>
+
         </form>
       </div>
     </div>
