@@ -218,7 +218,6 @@ export default function CompanyModal({ company, onClose, onSave }) {
 
               {showHours && (
                 <div className="mt-4 space-y-4">
-                  {/* Toggle activar/desactivar */}
                   <label className="flex items-center gap-3 cursor-pointer select-none">
                     <div
                       onClick={() => setBH('enabled', !bh.enabled)}
@@ -233,39 +232,29 @@ export default function CompanyModal({ company, onClose, onSave }) {
 
                   {bh.enabled && (
                     <>
-                      {/* Tabla de días */}
                       <div className="space-y-2">
                         {DAYS.map(({ key, label }) => {
                           const day = bh.schedule[key] || { open: false, from: '08:00', to: '18:00' };
                           return (
                             <div key={key} className={`flex items-center gap-2 rounded-xl px-3 py-2 transition-colors ${day.open ? 'bg-brand-50 border border-brand-100' : 'bg-slate-50 border border-slate-100'}`}>
-                              {/* Toggle día */}
                               <div
                                 onClick={() => setDayField(key, 'open', !day.open)}
                                 className={`relative w-8 h-4 rounded-full flex-shrink-0 cursor-pointer transition-colors ${day.open ? 'bg-brand-500' : 'bg-slate-300'}`}
                               >
                                 <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${day.open ? 'translate-x-4' : ''}`} />
                               </div>
-
                               <span className={`text-xs font-semibold w-20 flex-shrink-0 ${day.open ? 'text-slate-800' : 'text-slate-400'}`}>
                                 {label}
                               </span>
-
                               {day.open ? (
                                 <>
-                                  <input
-                                    type="time"
-                                    value={day.from}
+                                  <input type="time" value={day.from}
                                     onChange={e => setDayField(key, 'from', e.target.value)}
-                                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white min-w-0"
-                                  />
+                                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white min-w-0" />
                                   <span className="text-xs text-slate-400 flex-shrink-0">a</span>
-                                  <input
-                                    type="time"
-                                    value={day.to}
+                                  <input type="time" value={day.to}
                                     onChange={e => setDayField(key, 'to', e.target.value)}
-                                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white min-w-0"
-                                  />
+                                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white min-w-0" />
                                 </>
                               ) : (
                                 <span className="text-xs text-slate-400 flex-1">Cerrado</span>
@@ -275,13 +264,8 @@ export default function CompanyModal({ company, onClose, onSave }) {
                         })}
                       </div>
 
-                      {/* Zona horaria */}
                       <Field label="Zona horaria">
-                        <select
-                          value={bh.timezone}
-                          onChange={e => setBH('timezone', e.target.value)}
-                          className="input"
-                        >
+                        <select value={bh.timezone} onChange={e => setBH('timezone', e.target.value)} className="input">
                           <option value="America/Bogota">Colombia (UTC-5)</option>
                           <option value="America/Mexico_City">México Ciudad (UTC-6)</option>
                           <option value="America/Lima">Perú / Lima (UTC-5)</option>
@@ -295,15 +279,11 @@ export default function CompanyModal({ company, onClose, onSave }) {
                         </select>
                       </Field>
 
-                      {/* Mensaje fuera de horario */}
                       <Field label="Mensaje fuera de horario">
-                        <textarea
-                          rows={3}
-                          value={bh.closed_message}
+                        <textarea rows={3} value={bh.closed_message}
                           onChange={e => setBH('closed_message', e.target.value)}
                           className="input resize-none"
-                          placeholder="Hola 👋 En este momento estamos fuera de horario..."
-                        />
+                          placeholder="Hola 👋 En este momento estamos fuera de horario..." />
                         <p className="text-xs text-slate-400 mt-1">
                           Este mensaje se envía cuando el usuario escribe fuera del horario configurado.
                         </p>
@@ -313,27 +293,13 @@ export default function CompanyModal({ company, onClose, onSave }) {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Botones fijos */}
-          <div className="flex gap-3 px-6 py-4 border-t border-slate-100 flex-shrink-0">
-            <button type="button" onClick={onClose} className="flex-1 btn-secondary">
-              Cancelar
-            </button>
-            <button type="submit" disabled={loading} className="flex-1 btn-primary">
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  Guardando...
-                </span>
-              ) : 'Guardar'}
-            </button>
-            {/* Perfil de WhatsApp */}
+            {/* ── Perfil de WhatsApp (colapsable) ── */}
             <div className="border-t border-slate-100 pt-4">
               <button
                 type="button"
                 onClick={() => { setShowProfile(v => !v); setProfileMsg(null); }}
-                className="w-full flex items-center justify-between text-left group"
+                className="w-full flex items-center justify-between text-left"
               >
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center">
@@ -388,69 +354,45 @@ export default function CompanyModal({ company, onClose, onSave }) {
                   )}
 
                   <Field label="Acerca de" hint="Máx. 256 caracteres — visible en el perfil del número">
-                    <input
-                      type="text"
-                      maxLength={256}
-                      value={waProfile.about}
+                    <input type="text" maxLength={256} value={waProfile.about}
                       onChange={e => setWaProfile(p => ({ ...p, about: e.target.value }))}
-                      className="input"
-                      placeholder="Empresa de ventas en línea"
-                      disabled={!company || !hasCredentials}
-                    />
+                      className="input" placeholder="Empresa de ventas en línea"
+                      disabled={!company || !hasCredentials} />
                   </Field>
 
                   <Field label="Descripción">
-                    <textarea
-                      rows={2}
-                      value={waProfile.description}
+                    <textarea rows={2} value={waProfile.description}
                       onChange={e => setWaProfile(p => ({ ...p, description: e.target.value }))}
-                      className="input resize-none"
-                      placeholder="Descripción completa del negocio"
-                      disabled={!company || !hasCredentials}
-                    />
+                      className="input resize-none" placeholder="Descripción completa del negocio"
+                      disabled={!company || !hasCredentials} />
                   </Field>
 
                   <Field label="Dirección">
-                    <input
-                      type="text"
-                      value={waProfile.address}
+                    <input type="text" value={waProfile.address}
                       onChange={e => setWaProfile(p => ({ ...p, address: e.target.value }))}
-                      className="input"
-                      placeholder="Calle 123, Ciudad, País"
-                      disabled={!company || !hasCredentials}
-                    />
+                      className="input" placeholder="Calle 123, Ciudad, País"
+                      disabled={!company || !hasCredentials} />
                   </Field>
 
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Email de contacto">
-                      <input
-                        type="email"
-                        value={waProfile.email}
+                      <input type="email" value={waProfile.email}
                         onChange={e => setWaProfile(p => ({ ...p, email: e.target.value }))}
-                        className="input"
-                        placeholder="contacto@empresa.com"
-                        disabled={!company || !hasCredentials}
-                      />
+                        className="input" placeholder="contacto@empresa.com"
+                        disabled={!company || !hasCredentials} />
                     </Field>
                     <Field label="Sitio web">
-                      <input
-                        type="url"
-                        value={waProfile.website}
+                      <input type="url" value={waProfile.website}
                         onChange={e => setWaProfile(p => ({ ...p, website: e.target.value }))}
-                        className="input"
-                        placeholder="https://empresa.com"
-                        disabled={!company || !hasCredentials}
-                      />
+                        className="input" placeholder="https://empresa.com"
+                        disabled={!company || !hasCredentials} />
                     </Field>
                   </div>
 
                   <Field label="Categoría del negocio">
-                    <select
-                      value={waProfile.vertical}
+                    <select value={waProfile.vertical}
                       onChange={e => setWaProfile(p => ({ ...p, vertical: e.target.value }))}
-                      className="input"
-                      disabled={!company || !hasCredentials}
-                    >
+                      className="input" disabled={!company || !hasCredentials}>
                       <option value="OTHER">Otro</option>
                       <option value="AUTO">Automotriz</option>
                       <option value="BEAUTY">Belleza y Spa</option>
@@ -493,6 +435,21 @@ export default function CompanyModal({ company, onClose, onSave }) {
               )}
             </div>
 
+          </div>
+
+          {/* Botones fijos */}
+          <div className="flex gap-3 px-6 py-4 border-t border-slate-100 flex-shrink-0">
+            <button type="button" onClick={onClose} className="flex-1 btn-secondary">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading} className="flex-1 btn-primary">
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  Guardando...
+                </span>
+              ) : 'Guardar'}
+            </button>
           </div>
 
         </form>
