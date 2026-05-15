@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart2, Users, GitBranch, TrendingUp, MessageCircle,
-  CheckCircle2, Clock, Bot, Plus, KeyRound, Trash2,
+  CheckCircle2, Clock, Bot, KeyRound, Trash2,
   ToggleLeft, ToggleRight, RefreshCw, X, Zap, AlertCircle,
   ChevronRight, Play, Square,
 } from 'lucide-react';
@@ -39,9 +39,6 @@ export default function AdminPanel() {
   const [flows, setFlows]       = useState([]);
   const [loadingFlows, setLoadingFlows]   = useState(false);
 
-  const [showCreateAgent, setShowCreateAgent] = useState(false);
-  const [agentForm, setAgentForm] = useState({ username: '', email: '', password: '' });
-  const [savingAgent, setSavingAgent] = useState(false);
 
   const [pwdModal, setPwdModal] = useState(null);
   const [newPwd, setNewPwd]     = useState('');
@@ -91,22 +88,6 @@ export default function AdminPanel() {
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => { if (tab === 'agents') loadAgents(); }, [tab, loadAgents]);
   useEffect(() => { if (tab === 'flows')  loadFlows();  }, [tab, loadFlows]);
-
-  async function handleCreateAgent(e) {
-    e.preventDefault();
-    setSavingAgent(true);
-    try {
-      await adminAPI.createAgent({ ...agentForm, role: 'company_agent', company_id: companyId });
-      toast.success('Agente creado correctamente');
-      setAgentForm({ username: '', email: '', password: '' });
-      setShowCreateAgent(false);
-      loadAgents();
-    } catch (err) {
-      toast.error(err?.response?.data?.error || 'Error al crear agente');
-    } finally {
-      setSavingAgent(false);
-    }
-  }
 
   async function handleToggle(agent) {
     try {
@@ -260,50 +241,7 @@ export default function AdminPanel() {
       {/* ── TAB: AGENTES ── */}
       {tab === 'agents' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">{agents.length} agente{agents.length !== 1 ? 's' : ''} registrado{agents.length !== 1 ? 's' : ''}</p>
-            <button onClick={() => setShowCreateAgent(v => !v)}
-              className="btn-primary flex items-center gap-2 text-sm">
-              <Plus size={15} />
-              Nuevo agente
-            </button>
-          </div>
-
-          {showCreateAgent && (
-            <div className="card p-5 border-2 border-brand-100">
-              <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                <Plus size={15} className="text-brand-500" /> Crear agente
-              </h3>
-              <form onSubmit={handleCreateAgent} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-1">Usuario *</label>
-                    <input className="input" placeholder="nombre.agente" required
-                      value={agentForm.username}
-                      onChange={e => setAgentForm(f => ({ ...f, username: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-1">Email (opcional)</label>
-                    <input className="input" type="email" placeholder="agente@empresa.com"
-                      value={agentForm.email}
-                      onChange={e => setAgentForm(f => ({ ...f, email: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-1">Contraseña *</label>
-                    <input className="input" type="password" placeholder="Mín. 6 caracteres" minLength={6} required
-                      value={agentForm.password}
-                      onChange={e => setAgentForm(f => ({ ...f, password: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button type="button" onClick={() => setShowCreateAgent(false)} className="btn-secondary text-sm">Cancelar</button>
-                  <button type="submit" disabled={savingAgent} className="btn-primary text-sm">
-                    {savingAgent ? 'Creando...' : 'Crear agente'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
+          <p className="text-sm text-slate-500">{agents.length} agente{agents.length !== 1 ? 's' : ''} registrado{agents.length !== 1 ? 's' : ''}</p>
 
           {loadingAgents ? (
             <div className="space-y-2">
