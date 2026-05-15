@@ -30,7 +30,8 @@ export default function AdminPanel() {
 
   const [tab, setTab]       = useState('reports');
   const [period, setPeriod] = useState(30);
-  const [stats, setStats]   = useState(null);
+  const [stats, setStats]       = useState(null);
+  const [csat, setCsat]         = useState(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
   const [agents, setAgents]     = useState([]);
@@ -51,8 +52,12 @@ export default function AdminPanel() {
   const loadStats = useCallback(async () => {
     setLoadingStats(true);
     try {
-      const data = await adminAPI.getStats({ period, company_id: companyId });
-      setStats(data);
+      const [statsData, csatData] = await Promise.all([
+        adminAPI.getStats({ period, company_id: companyId }),
+        adminAPI.getCsatStats({ period, company_id: companyId }),
+      ]);
+      setStats(statsData);
+      setCsat(csatData);
     } catch {
       toast.error('Error cargando estadísticas');
     } finally {
@@ -231,6 +236,17 @@ export default function AdminPanel() {
                     Mensajes enviados por agente — últimos {period} días
                   </h3>
                   <AgentBars data={stats.by_agent} />
+                </div>
+              )}
+
+              {/* CSAT */}
+              {csat && (
+                <div className="card p-5">
+                  <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <span className="text-base">⭐</span>
+                    Satisfacción del cliente (CSAT)
+                  </h3>
+                  <CsatPanel csat={csat} />
                 </div>
               )}
             </>
@@ -554,6 +570,66 @@ function DonutChart({ data }) {
                 {total > 0 ? Math.round(val / total * 100) : 0}%
               </span>
             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CsatPanel({ csat }) {
+  const STARS = ['', '😞', '😕', '😐', '😊', '😍'];
+  const LABELS = ['', 'Muy insatisfecho', 'Insatisfecho', 'Regular', 'Satisfecho', 'Muy satisfecho'];
+  const COLORS = ['', '#ef4444', '#f97316', '#eab308', '#22c55e', '#10b981'];
+  const max = Math.max(...Object.values(csat.distribution), 1);
+  const responseRate = csat.sent > 0 ? Math.round((csat.total / csat.sent) * 100) : 0;
+
+  if (csat.sent === 0) {
+    return (
+      <div className="text-center py-8 text-slate-400">
+        <p className="text-3xl mb-2">⭐</p>
+        <p className="text-sm font-medium">Sin encuestas enviadas aún</p>
+        <p className="text-xs mt-1">Las encuestas se envían automáticamente al cerrar conversaciones</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      {/* Score promedio */}
+      <div className="flex flex-col items-center justify-center bg-slate-50 rounded-xl p-6 border border-slate-100">
+        <p className="text-5xl font-black text-slate-800 mb-1">{csat.avg}</p>
+        <div className="flex gap-0.5 mb-2">
+          {[1,2,3,4,5].map(n => (
+            <span key={n} className={`text-lg ${n <= Math.round(csat.avg) ? 'text-amber-400' : 'text-slate-200'}`}>★</span>
+          ))}
+        </div>
+        <p className="text-xs text-slate-500 text-center">
+          Basado en <strong>{csat.total}</strong> respuesta{csat.total !== 1 ? 's' : ''} de <strong>{csat.sent}</strong> encuestas enviadas
+        </p>
+        <div className="mt-3 px-3 py-1 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-100">
+          {responseRate}% tasa de respuesta
+        </div>
+      </div>
+
+      {/* Distribución */}
+      <div className="space-y-2">
+        {[5,4,3,2,1].map(score => (
+          <div key={score} className="flex items-center gap-2">
+            <span className="text-base w-5 flex-shrink-0">{STARS[score]}</span>
+            <span className="text-xs text-slate-500 w-24 flex-shrink-0 truncate">{LABELS[score]}</span>
+            <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${(csat.distribution[score] / max) * 100}%`,
+                  background: COLORS[score],
+                }}
+              />
+            </div>
+            <span className="text-xs font-bold text-slate-600 w-5 text-right flex-shrink-0">
+              {csat.distribution[score]}
+            </span>
           </div>
         ))}
       </div>

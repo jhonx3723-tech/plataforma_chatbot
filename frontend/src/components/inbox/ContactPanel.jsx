@@ -1,18 +1,27 @@
 import { useState, useEffect } from 'react';
-import { User, Building2, FileText, Save, ChevronRight, ChevronLeft } from 'lucide-react';
-import { contactsAPI } from '../../lib/api';
+import { User, Building2, FileText, Save, ChevronRight, ChevronLeft, ArrowRightLeft, Check } from 'lucide-react';
+import { contactsAPI, conversationsAPI } from '../../lib/api';
+import { useAuth } from '../../context/AuthContext';
 
-export default function ContactPanel({ conversation, companyId, onContactUpdated }) {
+export default function ContactPanel({ conversation, companyId, onContactUpdated, onTransferred }) {
+  const { user } = useAuth();
   const [contact, setContact]   = useState(null);
   const [form, setForm]         = useState({ name: '', company_name: '', notes: '' });
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
+  const [agents, setAgents]           = useState([]);
+  const [selectedAgent, setSelectedAgent] = useState('');
+  const [transferring, setTransferring]   = useState(false);
+  const [transferred, setTransferred]     = useState(false);
+
   useEffect(() => {
     if (!conversation?.user_phone || !companyId) return;
     setContact(null);
     setSaved(false);
+    setTransferred(false);
+    setSelectedAgent('');
 
     contactsAPI.getByPhone(conversation.user_phone, companyId)
       .then(c => {
@@ -24,6 +33,13 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
         setForm({ name: '', company_name: '', notes: '' });
       });
   }, [conversation?.user_phone, companyId]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    conversationsAPI.getAgents(companyId)
+      .then(data => setAgents(data.filter(a => a.role === 'company_agent')))
+      .catch(() => {});
+  }, [companyId]);
 
   async function handleSave() {
     setSaving(true);
@@ -43,9 +59,28 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
     finally { setSaving(false); }
   }
 
+  async function handleTransfer() {
+    if (!selectedAgent || !conversation?.id) return;
+    setTransferring(true);
+    try {
+      const agent = agents.find(a => a.id === selectedAgent);
+      await conversationsAPI.assign(conversation.id, selectedAgent);
+      await conversationsAPI.addNote(
+        conversation.id,
+        `🔄 Conversación transferida a ${agent?.username || 'agente'} por ${user?.username}`
+      );
+      setTransferred(true);
+      setTimeout(() => setTransferred(false), 3000);
+      onTransferred?.();
+    } catch { /* silent */ }
+    finally { setTransferring(false); }
+  }
+
   const dirty = contact
     ? form.name !== (contact.name || '') || form.company_name !== (contact.company_name || '') || form.notes !== (contact.notes || '')
     : form.name || form.company_name || form.notes;
+
+  const currentAssigned = conversation?.assigned_to;
 
   if (collapsed) {
     return (
@@ -76,7 +111,7 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Teléfono (no editable) */}
+        {/* Teléfono */}
         <div>
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Teléfono</p>
           <p className="text-sm font-mono text-slate-700 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
@@ -86,57 +121,81 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
 
         {/* Nombre */}
         <div>
-          <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-            Nombre
-          </label>
+          <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Nombre</label>
           <div className="relative">
             <User size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" />
-            <input
-              type="text"
-              value={form.name}
+            <input type="text" value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="Nombre del contacto"
-              className="w-full text-sm pl-7 pr-2.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent bg-white placeholder:text-slate-300"
-            />
+              className="w-full text-sm pl-7 pr-2.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent bg-white placeholder:text-slate-300" />
           </div>
         </div>
 
         {/* Empresa */}
         <div>
-          <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-            Empresa cliente
-          </label>
+          <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Empresa cliente</label>
           <div className="relative">
             <Building2 size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" />
-            <input
-              type="text"
-              value={form.company_name}
+            <input type="text" value={form.company_name}
               onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))}
               placeholder="Empresa del contacto"
-              className="w-full text-sm pl-7 pr-2.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent bg-white placeholder:text-slate-300"
-            />
+              className="w-full text-sm pl-7 pr-2.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent bg-white placeholder:text-slate-300" />
           </div>
         </div>
 
         {/* Notas */}
         <div>
-          <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-            Notas internas
-          </label>
+          <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Notas internas</label>
           <div className="relative">
             <FileText size={12} className="absolute left-2.5 top-2.5 text-slate-300" />
-            <textarea
-              value={form.notes}
+            <textarea value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               placeholder="Anotaciones sobre este contacto..."
               rows={4}
-              className="w-full text-sm pl-7 pr-2.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent bg-white placeholder:text-slate-300 resize-none"
-            />
+              className="w-full text-sm pl-7 pr-2.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent bg-white placeholder:text-slate-300 resize-none" />
           </div>
         </div>
+
+        {/* Transferir a otro agente */}
+        {agents.length > 0 && conversation?.status !== 'closed' && (
+          <div className="border-t border-slate-100 pt-4">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <ArrowRightLeft size={10} /> Transferir conversación
+            </p>
+            <select
+              value={selectedAgent}
+              onChange={e => setSelectedAgent(e.target.value)}
+              className="w-full text-sm px-2.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white text-slate-700 mb-2"
+            >
+              <option value="">Seleccionar agente...</option>
+              {agents
+                .filter(a => a.id !== currentAssigned)
+                .map(a => (
+                  <option key={a.id} value={a.id}>{a.username}</option>
+                ))}
+            </select>
+            <button
+              onClick={handleTransfer}
+              disabled={!selectedAgent || transferring}
+              className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
+                transferred
+                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                  : selectedAgent
+                  ? 'bg-violet-500 text-white hover:bg-violet-600 shadow-sm'
+                  : 'bg-slate-50 text-slate-300 cursor-not-allowed border border-slate-100'
+              }`}
+            >
+              {transferred
+                ? <><Check size={14} /> Transferida</>
+                : transferring
+                ? 'Transfiriendo...'
+                : <><ArrowRightLeft size={14} /> Transferir</>}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Guardar */}
+      {/* Guardar contacto */}
       <div className="p-4 border-t border-slate-100">
         <button
           onClick={handleSave}

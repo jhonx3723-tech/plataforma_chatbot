@@ -312,6 +312,41 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
       .delete()
       .eq('company_id', conv.company_id)
       .eq('user_phone', conv.user_phone);
+
+    // Enviar encuesta CSAT si la empresa tiene WhatsApp configurado
+    const { data: company } = await supabase
+      .from('companies')
+      .select('whatsapp_phone_id, whatsapp_token')
+      .eq('id', conv.company_id)
+      .single();
+
+    if (company?.whatsapp_phone_id && company?.whatsapp_token) {
+      const csatMsg =
+        '¿Cómo calificás la atención que recibiste? Responde con un número del 1 al 5:\n\n' +
+        '1 — Muy insatisfecho 😞\n' +
+        '2 — Insatisfecho 😕\n' +
+        '3 — Regular 😐\n' +
+        '4 — Satisfecho 😊\n' +
+        '5 — Muy satisfecho 😍';
+      try {
+        await sendText(company.whatsapp_phone_id, company.whatsapp_token, conv.user_phone, csatMsg);
+        await supabase.from('messages').insert({
+          conversation_id: conv.id,
+          company_id:      conv.company_id,
+          direction:       'outbound',
+          content:         csatMsg,
+          sent_by:         'bot',
+          read:            true,
+          is_note:         false,
+        });
+      } catch (e) {
+        console.error('Error enviando CSAT:', e.message);
+      }
+      await supabase
+        .from('conversations')
+        .update({ csat_sent_at: new Date().toISOString() })
+        .eq('id', conv.id);
+    }
   }
 
   const { data: updated } = await supabase

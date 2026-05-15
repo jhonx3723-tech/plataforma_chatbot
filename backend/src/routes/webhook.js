@@ -54,6 +54,35 @@ router.post('/whatsapp/:companyId', async (req, res) => {
     }
     if (!userInput) return;
 
+    // ── Verificar si hay encuesta CSAT pendiente en conversación cerrada ────
+    const { data: csatConvs } = await supabase
+      .from('conversations')
+      .select('id, company_id')
+      .eq('company_id', company.id)
+      .eq('user_phone', userPhone)
+      .eq('status', 'closed')
+      .not('csat_sent_at', 'is', null)
+      .is('csat_score', null)
+      .order('last_message_at', { ascending: false })
+      .limit(1);
+
+    if (csatConvs?.length) {
+      const csatConv = csatConvs[0];
+      const score = parseInt(userInput);
+      if (score >= 1 && score <= 5) {
+        await supabase.from('conversations')
+          .update({ csat_score: score })
+          .eq('id', csatConv.id);
+        const thanks = '¡Gracias por tu calificación! 🙏 Tu opinión nos ayuda a mejorar.';
+        if (company.whatsapp_phone_id && company.whatsapp_token) {
+          await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, thanks);
+        }
+        await saveMessage(csatConv.id, company.id, 'outbound', thanks, 'bot');
+      }
+      // Si no es 1-5 o ya se registró, crear nueva conversación normalmente
+      if (score >= 1 && score <= 5) return;
+    }
+
     const conv = await findOrCreateConversation(company.id, userPhone);
 
     // Auto-crear / actualizar contacto con el nombre de WhatsApp

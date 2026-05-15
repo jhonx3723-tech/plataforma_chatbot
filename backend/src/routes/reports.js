@@ -197,4 +197,43 @@ router.get('/admin/stats', authMiddleware, requireCompanyAdmin, async (req, res)
   });
 });
 
+// Estadísticas CSAT para company_admin
+router.get('/admin/csat', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  const isSuper   = req.user.role === 'super_admin';
+  const companyId = isSuper ? req.query.company_id : req.user.company_id;
+  if (!companyId) return res.status(400).json({ error: 'company_id requerido' });
+
+  const days = Math.min(parseInt(req.query.period) || 30, 90);
+  const from = new Date();
+  from.setDate(from.getDate() - (days - 1));
+  from.setHours(0, 0, 0, 0);
+  const fromISO = from.toISOString();
+
+  const [{ data: scored }, { count: sent }] = await Promise.all([
+    supabase.from('conversations')
+      .select('csat_score')
+      .eq('company_id', companyId)
+      .not('csat_score', 'is', null)
+      .gte('updated_at', fromISO),
+    supabase.from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .not('csat_sent_at', 'is', null)
+      .gte('updated_at', fromISO),
+  ]);
+
+  const scores = (scored || []).map(c => c.csat_score);
+  const total  = scores.length;
+  const avg    = total > 0 ? scores.reduce((s, v) => s + v, 0) / total : 0;
+  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  scores.forEach(s => { if (distribution[s] !== undefined) distribution[s]++; });
+
+  res.json({
+    avg:          parseFloat(avg.toFixed(1)),
+    total,
+    sent:         sent || 0,
+    distribution,
+  });
+});
+
 module.exports = router;
