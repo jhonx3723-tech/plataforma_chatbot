@@ -1,9 +1,10 @@
 const express = require('express');
 const supabase = require('../supabase');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireCompanyAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Cualquier usuario autenticado puede ver las etiquetas de su empresa
 router.get('/', authMiddleware, async (req, res) => {
   const companyId = req.query.company_id || req.user.company_id;
   if (!companyId) return res.status(400).json({ error: 'company_id requerido' });
@@ -18,11 +19,14 @@ router.get('/', authMiddleware, async (req, res) => {
   res.json(data);
 });
 
-router.post('/', authMiddleware, async (req, res) => {
+// Solo company_admin y super_admin pueden crear etiquetas
+router.post('/', authMiddleware, requireCompanyAdmin, async (req, res) => {
   const { name, color, company_id } = req.body;
   if (!name) return res.status(400).json({ error: 'Nombre requerido' });
 
-  const targetCompanyId = company_id || req.user.company_id;
+  const targetCompanyId = req.user.role === 'super_admin'
+    ? (company_id || req.user.company_id)
+    : req.user.company_id;
 
   const { data, error } = await supabase
     .from('labels')
@@ -34,16 +38,45 @@ router.post('/', authMiddleware, async (req, res) => {
   res.status(201).json(data);
 });
 
-router.delete('/:id', authMiddleware, async (req, res) => {
+// Solo company_admin y super_admin pueden editar etiquetas
+router.put('/:id', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  const { name, color } = req.body;
+
+  const { data: label } = await supabase
+    .from('labels').select('company_id').eq('id', req.params.id).single();
+  if (!label) return res.status(404).json({ error: 'Etiqueta no encontrada' });
+
+  if (req.user.role === 'company_admin' && label.company_id !== req.user.company_id)
+    return res.status(403).json({ error: 'Sin permiso' });
+
+  const updates = {};
+  if (name)  updates.name  = name.trim();
+  if (color) updates.color = color;
+
+  const { data, error } = await supabase
+    .from('labels').update(updates).eq('id', req.params.id).select().single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Solo company_admin y super_admin pueden eliminar etiquetas
+router.delete('/:id', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  const { data: label } = await supabase
+    .from('labels').select('company_id').eq('id', req.params.id).single();
+  if (!label) return res.status(404).json({ error: 'Etiqueta no encontrada' });
+
+  if (req.user.role === 'company_admin' && label.company_id !== req.user.company_id)
+    return res.status(403).json({ error: 'Sin permiso' });
+
   const { error } = await supabase.from('labels').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
 
-// Agregar etiqueta a conversación
+// Agregar etiqueta a conversación (cualquier agente)
 router.post('/conversation/:convId', authMiddleware, async (req, res) => {
   const { label_id } = req.body;
-
   const { data: conv } = await supabase
     .from('conversations').select('label_ids').eq('id', req.params.convId).single();
   if (!conv) return res.status(404).json({ error: 'Conversación no encontrada' });
@@ -62,14 +95,13 @@ router.post('/conversation/:convId', authMiddleware, async (req, res) => {
   res.json(data);
 });
 
-// Quitar etiqueta de conversación
+// Quitar etiqueta de conversación (cualquier agente)
 router.delete('/conversation/:convId/:labelId', authMiddleware, async (req, res) => {
   const { data: conv } = await supabase
     .from('conversations').select('label_ids').eq('id', req.params.convId).single();
   if (!conv) return res.status(404).json({ error: 'Conversación no encontrada' });
 
   const updated = (conv.label_ids || []).filter(id => id !== req.params.labelId);
-
   const { data, error } = await supabase
     .from('conversations')
     .update({ label_ids: updated })

@@ -17,6 +17,8 @@ const templatesRouter     = require('./routes/templates');
 const labelsRouter        = require('./routes/labels');
 const reportsRouter       = require('./routes/reports');
 
+const { sendText } = require('./services/whatsapp');
+
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
@@ -54,9 +56,69 @@ app.get('/api/health', (_req, res) =>
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 );
 
+// ── Cron: follow-ups automáticos (cada 15 min) ────────────────────────────────
+async function runFollowUps() {
+  try {
+    const { data: companies } = await supabase
+      .from('companies')
+      .select('id, whatsapp_phone_id, whatsapp_token, follow_up_config')
+      .eq('active', 1)
+      .not('follow_up_config', 'is', null);
+
+    for (const company of (companies || [])) {
+      const cfg = company.follow_up_config;
+      if (!cfg?.enabled || !cfg?.hours) continue;
+
+      const cutoff = new Date();
+      cutoff.setHours(cutoff.getHours() - cfg.hours);
+
+      const { data: convs } = await supabase
+        .from('conversations')
+        .select('id, user_phone, follow_up_sent_at, last_message_at')
+        .eq('company_id', company.id)
+        .eq('status', 'human')
+        .lte('last_message_at', cutoff.toISOString());
+
+      for (const conv of (convs || [])) {
+        if (
+          conv.follow_up_sent_at &&
+          new Date(conv.follow_up_sent_at) > new Date(conv.last_message_at)
+        ) continue;
+
+        const msg = cfg.message?.trim() || '¿Sigues necesitando ayuda? Estamos aquí para atenderte. 😊';
+
+        if (cfg.action === 'message' && company.whatsapp_phone_id && company.whatsapp_token) {
+          try { await sendText(company.whatsapp_phone_id, company.whatsapp_token, conv.user_phone, msg); } catch { /* silent */ }
+          await supabase.from('messages').insert({
+            conversation_id: conv.id, company_id: company.id,
+            direction: 'outbound', content: msg, sent_by: 'bot', read: true, is_note: false,
+          });
+          await supabase.from('conversations')
+            .update({ last_message: msg, last_message_at: new Date().toISOString() })
+            .eq('id', conv.id);
+        } else {
+          const note = `⏰ Sin respuesta hace más de ${cfg.hours} hora${cfg.hours > 1 ? 's' : ''}. Recordatorio automático.`;
+          await supabase.from('messages').insert({
+            conversation_id: conv.id, company_id: company.id,
+            direction: 'outbound', content: note, sent_by: 'bot', read: true, is_note: true,
+          });
+        }
+
+        await supabase.from('conversations')
+          .update({ follow_up_sent_at: new Date().toISOString() })
+          .eq('id', conv.id);
+      }
+    }
+  } catch (err) {
+    console.error('Error en follow-ups:', err.message);
+  }
+}
+
 // ── Arranque ──────────────────────────────────────────────────────────────────
 initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`✓ Servidor en http://localhost:${PORT}`);
+    setInterval(runFollowUps, 15 * 60 * 1000); // cada 15 minutos
+    runFollowUps(); // primera ejecución al arrancar
   });
 });

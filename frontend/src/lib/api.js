@@ -104,6 +104,18 @@ export const authAPI = {
   changePassword: (current, newPassword) => api.put('/auth/password', { current, newPassword }).then(r => r.data),
 };
 
+export const labelsAdminAPI = {
+  getAll:    (company_id)        => api.get('/labels', { params: { company_id } }).then(r => r.data),
+  create:    (data)              => api.post('/labels', data).then(r => r.data),
+  update:    (id, data)          => api.put(`/labels/${id}`, data).then(r => r.data),
+  remove:    (id)                => api.delete(`/labels/${id}`).then(r => r.data),
+};
+
+export const followUpAPI = {
+  getConfig: ()       => api.get('/companies/my/follow-up').then(r => r.data),
+  saveConfig: (data)  => api.put('/companies/my/follow-up', data).then(r => r.data),
+};
+
 export const adminAPI = {
   getStats:      (params)          => api.get('/reports/admin/stats', { params }).then(r => r.data),
   getCsatStats:  (params)          => api.get('/reports/admin/csat',  { params }).then(r => r.data),

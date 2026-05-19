@@ -4,17 +4,19 @@ import {
   BarChart2, Users, GitBranch, TrendingUp, MessageCircle,
   CheckCircle2, Clock, Bot, KeyRound, Trash2,
   ToggleLeft, ToggleRight, RefreshCw, X, Zap, AlertCircle,
-  ChevronRight, Play, Square,
+  ChevronRight, Play, Square, Tag, Plus, Pencil, Bell, Save,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI, flowsAPI } from '../lib/api';
+import { adminAPI, flowsAPI, labelsAdminAPI, followUpAPI } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
 import ConfirmModal from '../components/ui/ConfirmModal';
 
 const TABS = [
-  { key: 'reports', label: 'Reportes',  icon: BarChart2  },
-  { key: 'agents',  label: 'Agentes',   icon: Users      },
-  { key: 'flows',   label: 'Flujos',    icon: GitBranch  },
+  { key: 'reports',    label: 'Reportes',      icon: BarChart2 },
+  { key: 'agents',     label: 'Agentes',        icon: Users     },
+  { key: 'flows',      label: 'Flujos',         icon: GitBranch },
+  { key: 'labels',     label: 'Etiquetas',      icon: Tag       },
+  { key: 'followup',   label: 'Recordatorios',  icon: Bell      },
 ];
 
 const PERIODS = [
@@ -38,7 +40,22 @@ export default function AdminPanel() {
   const [loadingAgents, setLoadingAgents] = useState(false);
 
   const [flows, setFlows]       = useState([]);
-  const [loadingFlows, setLoadingFlows]   = useState(false);
+  const [loadingFlows, setLoadingFlows] = useState(false);
+
+  // Etiquetas
+  const [labels, setLabels]         = useState([]);
+  const [loadingLabels, setLoadingLabels] = useState(false);
+  const [labelForm, setLabelForm]   = useState({ name: '', color: '#f97316' });
+  const [editingLabel, setEditingLabel] = useState(null);
+  const [savingLabel, setSavingLabel]   = useState(false);
+  const [confirmDeleteLabel, setConfirmDeleteLabel] = useState(null);
+
+  const PRESET_COLORS = ['#f97316','#10b981','#3b82f6','#8b5cf6','#ec4899','#ef4444','#f59e0b','#6366f1'];
+
+  // Follow-up
+  const [fuConfig, setFuConfig]     = useState({ enabled: false, hours: 2, action: 'note', message: '' });
+  const [loadingFu, setLoadingFu]   = useState(false);
+  const [savingFu, setSavingFu]     = useState(false);
 
 
   const [pwdModal, setPwdModal] = useState(null);
@@ -90,9 +107,66 @@ export default function AdminPanel() {
     }
   }, [companyId]);
 
+  const loadLabels = useCallback(async () => {
+    setLoadingLabels(true);
+    try { setLabels(await labelsAdminAPI.getAll(companyId)); }
+    catch { toast.error('Error cargando etiquetas'); }
+    finally { setLoadingLabels(false); }
+  }, [companyId]);
+
+  const loadFollowUp = useCallback(async () => {
+    setLoadingFu(true);
+    try { const d = await followUpAPI.getConfig(); setFuConfig({ enabled: false, hours: 2, action: 'note', message: '', ...d }); }
+    catch { /* sin config aún */ }
+    finally { setLoadingFu(false); }
+  }, []);
+
   useEffect(() => { loadStats(); }, [loadStats]);
-  useEffect(() => { if (tab === 'agents') loadAgents(); }, [tab, loadAgents]);
-  useEffect(() => { if (tab === 'flows')  loadFlows();  }, [tab, loadFlows]);
+  useEffect(() => { if (tab === 'agents')  loadAgents();   }, [tab, loadAgents]);
+  useEffect(() => { if (tab === 'flows')   loadFlows();    }, [tab, loadFlows]);
+  useEffect(() => { if (tab === 'labels')  loadLabels();   }, [tab, loadLabels]);
+  useEffect(() => { if (tab === 'followup') loadFollowUp(); }, [tab, loadFollowUp]);
+
+  async function handleSaveLabel(e) {
+    e.preventDefault();
+    if (!labelForm.name.trim()) return;
+    setSavingLabel(true);
+    try {
+      if (editingLabel) {
+        const updated = await labelsAdminAPI.update(editingLabel.id, labelForm);
+        setLabels(prev => prev.map(l => l.id === editingLabel.id ? updated : l));
+        toast.success('Etiqueta actualizada');
+      } else {
+        const created = await labelsAdminAPI.create({ ...labelForm, company_id: companyId });
+        setLabels(prev => [...prev, created]);
+        toast.success('Etiqueta creada');
+      }
+      setLabelForm({ name: '', color: '#f97316' });
+      setEditingLabel(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Error al guardar etiqueta');
+    } finally { setSavingLabel(false); }
+  }
+
+  async function handleDeleteLabel(id) {
+    try {
+      await labelsAdminAPI.remove(id);
+      setLabels(prev => prev.filter(l => l.id !== id));
+      toast.success('Etiqueta eliminada');
+    } catch { toast.error('Error al eliminar'); }
+    finally { setConfirmDeleteLabel(null); }
+  }
+
+  async function handleSaveFollowUp(e) {
+    e.preventDefault();
+    setSavingFu(true);
+    try {
+      const saved = await followUpAPI.saveConfig(fuConfig);
+      setFuConfig(prev => ({ ...prev, ...saved }));
+      toast.success('Configuración guardada');
+    } catch { toast.error('Error al guardar'); }
+    finally { setSavingFu(false); }
+  }
 
   async function handleToggle(agent) {
     try {
@@ -399,6 +473,180 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {/* ── TAB: ETIQUETAS ── */}
+      {tab === 'labels' && (
+        <div className="space-y-6 max-w-2xl">
+          {/* Formulario crear / editar */}
+          <div className="card p-5">
+            <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <Tag size={15} className="text-brand-500" />
+              {editingLabel ? 'Editar etiqueta' : 'Nueva etiqueta'}
+            </h3>
+            <form onSubmit={handleSaveLabel} className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Nombre *</label>
+                <input className="input" placeholder="Ej: Interesado, Urgente, VIP..." required
+                  value={labelForm.name}
+                  onChange={e => setLabelForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-2">Color</label>
+                <div className="flex gap-2 flex-wrap">
+                  {PRESET_COLORS.map(c => (
+                    <button key={c} type="button" onClick={() => setLabelForm(f => ({ ...f, color: c }))}
+                      className={`w-7 h-7 rounded-full border-2 transition-transform ${labelForm.color === c ? 'border-slate-700 scale-110' : 'border-transparent'}`}
+                      style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+                {labelForm.name && (
+                  <div className="mt-2">
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full"
+                      style={{ backgroundColor: labelForm.color + '22', color: labelForm.color, border: `1px solid ${labelForm.color}44` }}>
+                      {labelForm.name}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2 justify-end">
+                {editingLabel && (
+                  <button type="button" className="btn-secondary text-sm"
+                    onClick={() => { setEditingLabel(null); setLabelForm({ name: '', color: '#f97316' }); }}>
+                    Cancelar
+                  </button>
+                )}
+                <button type="submit" disabled={savingLabel} className="btn-primary text-sm flex items-center gap-2">
+                  <Plus size={14} />
+                  {savingLabel ? 'Guardando...' : editingLabel ? 'Actualizar' : 'Crear etiqueta'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Lista de etiquetas */}
+          <div className="card p-5">
+            <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <Tag size={15} className="text-slate-500" />
+              Etiquetas creadas ({labels.length})
+            </h3>
+            {loadingLabels ? (
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" />)}</div>
+            ) : labels.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-6">No hay etiquetas. Crea la primera arriba.</p>
+            ) : (
+              <div className="space-y-2">
+                {labels.map(label => (
+                  <div key={label.id} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-slate-100 hover:bg-slate-50">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold px-2.5 py-1 rounded-full"
+                      style={{ backgroundColor: label.color + '22', color: label.color, border: `1px solid ${label.color}44` }}>
+                      {label.name}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => { setEditingLabel(label); setLabelForm({ name: label.name, color: label.color }); }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                        <Pencil size={13} />
+                      </button>
+                      <button onClick={() => setConfirmDeleteLabel(label)}
+                        className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: RECORDATORIOS ── */}
+      {tab === 'followup' && (
+        <div className="max-w-lg">
+          <div className="card p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center">
+                <Bell size={16} className="text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800">Recordatorios automáticos</h3>
+                <p className="text-xs text-slate-400">Alerta cuando una conversación lleva demasiado tiempo sin respuesta</p>
+              </div>
+            </div>
+
+            {loadingFu ? (
+              <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" />)}</div>
+            ) : (
+              <form onSubmit={handleSaveFollowUp} className="space-y-5">
+                {/* Activar */}
+                <label className="flex items-center justify-between cursor-pointer select-none">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Activar recordatorios</p>
+                    <p className="text-xs text-slate-400">El sistema revisará conversaciones cada 15 minutos</p>
+                  </div>
+                  <div onClick={() => setFuConfig(f => ({ ...f, enabled: !f.enabled }))}
+                    className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer ${fuConfig.enabled ? 'bg-brand-500' : 'bg-slate-200'}`}>
+                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${fuConfig.enabled ? 'translate-x-5' : ''}`} />
+                  </div>
+                </label>
+
+                {fuConfig.enabled && (
+                  <>
+                    {/* Horas sin respuesta */}
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 block mb-1">
+                        Horas sin respuesta del agente para activar el recordatorio
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min="1" max="48" className="input w-24 text-center"
+                          value={fuConfig.hours}
+                          onChange={e => setFuConfig(f => ({ ...f, hours: parseInt(e.target.value) || 1 }))} />
+                        <span className="text-sm text-slate-500">hora{fuConfig.hours !== 1 ? 's' : ''}</span>
+                      </div>
+                    </div>
+
+                    {/* Acción */}
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 block mb-2">¿Qué debe hacer?</label>
+                      <div className="flex gap-3">
+                        {[
+                          { key: 'note',    label: 'Nota interna',       desc: 'Solo visible para agentes' },
+                          { key: 'message', label: 'Mensaje al cliente', desc: 'Envía WhatsApp automático' },
+                        ].map(opt => (
+                          <button key={opt.key} type="button"
+                            onClick={() => setFuConfig(f => ({ ...f, action: opt.key }))}
+                            className={`flex-1 p-3 rounded-xl border-2 text-left transition-all ${
+                              fuConfig.action === opt.key ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:border-slate-300'
+                            }`}>
+                            <p className={`text-xs font-semibold ${fuConfig.action === opt.key ? 'text-brand-700' : 'text-slate-700'}`}>{opt.label}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Mensaje (solo si action = message) */}
+                    {fuConfig.action === 'message' && (
+                      <div>
+                        <label className="text-xs font-semibold text-slate-600 block mb-1">Mensaje a enviar</label>
+                        <textarea rows={3} className="input resize-none"
+                          placeholder="Ej: Hola, ¿sigues necesitando ayuda? Estamos aquí para atenderte. 😊"
+                          value={fuConfig.message}
+                          onChange={e => setFuConfig(f => ({ ...f, message: e.target.value }))} />
+                        <p className="text-xs text-slate-400 mt-1">Si lo dejas vacío se usará el mensaje por defecto.</p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <button type="submit" disabled={savingFu} className="w-full btn-primary flex items-center justify-center gap-2">
+                  <Save size={15} />
+                  {savingFu ? 'Guardando...' : 'Guardar configuración'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Modal restablecer contraseña */}
       {pwdModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -440,6 +688,16 @@ export default function AdminPanel() {
           danger confirmText="Eliminar"
           onConfirm={() => handleDeleteAgent(confirmDelete.id)}
           onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {confirmDeleteLabel && (
+        <ConfirmModal
+          title="Eliminar etiqueta"
+          message={`¿Eliminar la etiqueta "${confirmDeleteLabel.name}"? Se quitará de todas las conversaciones.`}
+          danger confirmText="Eliminar"
+          onConfirm={() => handleDeleteLabel(confirmDeleteLabel.id)}
+          onCancel={() => setConfirmDeleteLabel(null)}
         />
       )}
     </div>

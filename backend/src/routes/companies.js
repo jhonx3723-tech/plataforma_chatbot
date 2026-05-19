@@ -1,7 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../supabase');
-const { authMiddleware, requireSuperAdmin } = require('../middleware/auth');
+const { authMiddleware, requireSuperAdmin, requireCompanyAdmin } = require('../middleware/auth');
 const { getWAProfile, updateWAProfile } = require('../services/whatsapp');
 
 const router = express.Router();
@@ -100,6 +100,27 @@ router.delete('/:id', async (req, res) => {
     .from('companies').delete().eq('id', req.params.id);
   if (error) return res.status(404).json({ error: 'Empresa no encontrada' });
   res.json({ success: true });
+});
+
+// ── Follow-up config (company_admin gestiona su propia empresa) ───────────────
+router.get('/my/follow-up', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  const companyId = req.user.company_id;
+  if (!companyId) return res.status(400).json({ error: 'Sin empresa asignada' });
+  const { data, error } = await supabase
+    .from('companies').select('follow_up_config').eq('id', companyId).single();
+  if (error) return res.status(404).json({ error: 'Empresa no encontrada' });
+  res.json(data.follow_up_config || {});
+});
+
+router.put('/my/follow-up', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  const companyId = req.user.company_id;
+  if (!companyId) return res.status(400).json({ error: 'Sin empresa asignada' });
+  const { enabled, hours, action, message } = req.body;
+  const config = { enabled: !!enabled, hours: Math.max(1, parseInt(hours) || 2), action: action || 'note', message: message || '' };
+  const { data, error } = await supabase
+    .from('companies').update({ follow_up_config: config }).eq('id', companyId).select('follow_up_config').single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data.follow_up_config);
 });
 
 // ── Perfil público de WhatsApp Business ───────────────────────────────────────
