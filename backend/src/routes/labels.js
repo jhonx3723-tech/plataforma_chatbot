@@ -28,13 +28,22 @@ router.post('/', authMiddleware, requireCompanyAdmin, async (req, res) => {
     ? (company_id || req.user.company_id)
     : req.user.company_id;
 
+  // Verificar duplicado manualmente
+  const { data: existing } = await supabase
+    .from('labels')
+    .select('id')
+    .eq('company_id', targetCompanyId)
+    .ilike('name', name.trim())
+    .limit(1);
+  if (existing?.length) return res.status(409).json({ error: 'Ya existe una etiqueta con ese nombre' });
+
   const { data, error } = await supabase
     .from('labels')
     .insert({ company_id: targetCompanyId, name: name.trim(), color: color || '#f97316' })
     .select()
     .single();
 
-  if (error) return res.status(409).json({ error: 'Esa etiqueta ya existe' });
+  if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
 });
 
