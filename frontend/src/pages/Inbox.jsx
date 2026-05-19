@@ -3,7 +3,7 @@ import { conversationsAPI, templatesAPI, labelsAPI, API_BASE } from '../lib/api'
 import { useAuth } from '../context/AuthContext';
 import {
   Send, Bot, UserCheck, X, RefreshCw, Search, MessageSquare,
-  RotateCcw, UserPlus, StickyNote, ChevronDown, Check, Paperclip, Image,
+  RotateCcw, UserPlus, StickyNote, ChevronDown, Check, Paperclip, Image, Tag, Filter,
 } from 'lucide-react';
 import ContactPanel from '../components/inbox/ContactPanel';
 import TemplatePopover from '../components/inbox/TemplatePopover';
@@ -136,13 +136,19 @@ export default function Inbox() {
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching]         = useState(false);
   const [imagePreview, setImagePreview]   = useState(null); // { file, url }
+  const [labelFilter, setLabelFilter]     = useState(null); // label id
+  const [agentFilter, setAgentFilter]     = useState(null); // user id
+  const [showLabelFilter, setShowLabelFilter] = useState(false);
+  const [showAgentFilter, setShowAgentFilter] = useState(false);
 
-  const messagesEndRef  = useRef(null);
-  const pollRef         = useRef(null);
-  const selectedRef     = useRef(null);
-  const replyInputRef   = useRef(null);
-  const searchTimerRef  = useRef(null);
-  const fileInputRef    = useRef(null);
+  const messagesEndRef    = useRef(null);
+  const pollRef           = useRef(null);
+  const selectedRef       = useRef(null);
+  const replyInputRef     = useRef(null);
+  const searchTimerRef    = useRef(null);
+  const fileInputRef      = useRef(null);
+  const labelFilterRef    = useRef(null);
+  const agentFilterRef    = useRef(null);
 
   selectedRef.current = selected;
 
@@ -151,19 +157,44 @@ export default function Inbox() {
 
   const companyId = selected?.company_id || null;
 
-  // Cargar templates, labels y agentes cuando cambia la empresa
+  // Cargar labels y agentes al iniciar usando company_id del usuario (para filtros de la barra)
   useEffect(() => {
-    if (!companyId) return;
+    const cid = user?.company_id;
+    if (!cid) return;
     Promise.all([
-      templatesAPI.getAll(companyId),
-      labelsAPI.getAll(companyId),
-      conversationsAPI.getAgents(companyId),
-    ]).then(([t, l, a]) => {
-      setTemplates(t);
+      labelsAPI.getAll(cid),
+      conversationsAPI.getAgents(cid),
+    ]).then(([l, a]) => {
       setLabels(l);
       setAgents(a);
     }).catch(() => {});
-  }, [companyId]);
+  }, [user?.company_id]);
+
+  // Cargar templates cuando cambia la empresa seleccionada; también carga labels/agents para super_admin
+  useEffect(() => {
+    if (!companyId) return;
+    templatesAPI.getAll(companyId).then(t => setTemplates(t)).catch(() => {});
+    // super_admin no tiene company_id propio — carga por conversación seleccionada
+    if (!user?.company_id) {
+      Promise.all([
+        labelsAPI.getAll(companyId),
+        conversationsAPI.getAgents(companyId),
+      ]).then(([l, a]) => {
+        setLabels(l);
+        setAgents(a);
+      }).catch(() => {});
+    }
+  }, [companyId, user?.company_id]);
+
+  // Cerrar dropdowns de filtro al hacer click fuera
+  useEffect(() => {
+    function handler(e) {
+      if (labelFilterRef.current && !labelFilterRef.current.contains(e.target)) setShowLabelFilter(false);
+      if (agentFilterRef.current && !agentFilterRef.current.contains(e.target)) setShowAgentFilter(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -422,6 +453,10 @@ export default function Inbox() {
       (c.contact_name || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.last_message || '').toLowerCase().includes(search.toLowerCase());
+  }).filter(c => {
+    if (labelFilter && !(c.label_ids || []).includes(labelFilter)) return false;
+    if (agentFilter && c.assigned_to !== agentFilter) return false;
+    return true;
   });
 
   const inputPlaceholder = noteMode
@@ -500,6 +535,96 @@ export default function Inbox() {
             );
           })}
         </div>
+
+        {/* Filtros avanzados: etiqueta y agente */}
+        {(labels.length > 0 || agents.length > 0) && (
+          <div className="px-3 py-2 border-b border-slate-100 flex items-center gap-1.5">
+            <Filter size={11} className="text-slate-400 flex-shrink-0" />
+
+            {/* Label filter */}
+            {labels.length > 0 && (
+              <div className="relative flex-1" ref={labelFilterRef}>
+                <button
+                  onClick={() => { setShowLabelFilter(v => !v); setShowAgentFilter(false); }}
+                  className={`w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors truncate ${
+                    labelFilter
+                      ? 'bg-brand-50 border-brand-200 text-brand-600 font-semibold'
+                      : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <Tag size={10} className="flex-shrink-0" />
+                  <span className="truncate">
+                    {labelFilter ? (labels.find(l => l.id === labelFilter)?.name || 'Etiqueta') : 'Etiqueta'}
+                  </span>
+                  <ChevronDown size={10} className="ml-auto flex-shrink-0" />
+                </button>
+                {showLabelFilter && (
+                  <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-48 overflow-y-auto">
+                    {labels.map(l => (
+                      <button
+                        key={l.id}
+                        onClick={() => { setLabelFilter(labelFilter === l.id ? null : l.id); setShowLabelFilter(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 transition-colors"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: l.color }} />
+                        <span className="text-xs text-slate-700 flex-1 text-left truncate">{l.name}</span>
+                        {labelFilter === l.id && <Check size={11} className="text-brand-500 flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Agent filter */}
+            {agents.length > 0 && (
+              <div className="relative flex-1" ref={agentFilterRef}>
+                <button
+                  onClick={() => { setShowAgentFilter(v => !v); setShowLabelFilter(false); }}
+                  className={`w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors truncate ${
+                    agentFilter
+                      ? 'bg-violet-50 border-violet-200 text-violet-600 font-semibold'
+                      : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <UserCheck size={10} className="flex-shrink-0" />
+                  <span className="truncate">
+                    {agentFilter ? (agents.find(a => a.id === agentFilter)?.username || 'Agente') : 'Agente'}
+                  </span>
+                  <ChevronDown size={10} className="ml-auto flex-shrink-0" />
+                </button>
+                {showAgentFilter && (
+                  <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-48 overflow-y-auto">
+                    {agents.map(a => (
+                      <button
+                        key={a.id}
+                        onClick={() => { setAgentFilter(agentFilter === a.id ? null : a.id); setShowAgentFilter(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="w-4 h-4 rounded-full bg-violet-100 text-violet-600 text-[8px] font-bold flex items-center justify-center flex-shrink-0">
+                          {avatarInitials(a.username)}
+                        </div>
+                        <span className="text-xs text-slate-700 flex-1 text-left truncate">{a.username}</span>
+                        {agentFilter === a.id && <Check size={11} className="text-violet-500 flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Clear filters */}
+            {(labelFilter || agentFilter) && (
+              <button
+                onClick={() => { setLabelFilter(null); setAgentFilter(null); }}
+                title="Limpiar filtros"
+                className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* List */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-50 flex flex-col">
