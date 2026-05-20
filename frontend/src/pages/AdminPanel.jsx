@@ -4,19 +4,20 @@ import {
   BarChart2, Users, GitBranch, TrendingUp, MessageCircle,
   CheckCircle2, Clock, Bot, KeyRound, Trash2,
   ToggleLeft, ToggleRight, RefreshCw, X, Zap, AlertCircle,
-  ChevronRight, Play, Square, Tag, Plus, Pencil, Bell, Save,
+  ChevronRight, Play, Square, Tag, Plus, Pencil, Bell, Save, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI, flowsAPI, labelsAdminAPI, followUpAPI } from '../lib/api';
+import { adminAPI, flowsAPI, labelsAdminAPI, followUpAPI, templatesAPI } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
 import ConfirmModal from '../components/ui/ConfirmModal';
 
 const TABS = [
-  { key: 'reports',    label: 'Reportes',      icon: BarChart2 },
-  { key: 'agents',     label: 'Agentes',        icon: Users     },
-  { key: 'flows',      label: 'Flujos',         icon: GitBranch },
-  { key: 'labels',     label: 'Etiquetas',      icon: Tag       },
-  { key: 'followup',   label: 'Recordatorios',  icon: Bell      },
+  { key: 'reports',    label: 'Reportes',      icon: BarChart2     },
+  { key: 'agents',     label: 'Agentes',        icon: Users         },
+  { key: 'flows',      label: 'Flujos',         icon: GitBranch     },
+  { key: 'labels',     label: 'Etiquetas',      icon: Tag           },
+  { key: 'templates',  label: 'Plantillas',     icon: MessageSquare },
+  { key: 'followup',   label: 'Recordatorios',  icon: Bell          },
 ];
 
 const PERIODS = [
@@ -51,6 +52,14 @@ export default function AdminPanel() {
   const [confirmDeleteLabel, setConfirmDeleteLabel] = useState(null);
 
   const PRESET_COLORS = ['#f97316','#10b981','#3b82f6','#8b5cf6','#ec4899','#ef4444','#f59e0b','#6366f1'];
+
+  // Plantillas
+  const [templates, setTemplates]         = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [tplForm, setTplForm]             = useState({ shortcut: '', content: '' });
+  const [editingTpl, setEditingTpl]       = useState(null);
+  const [savingTpl, setSavingTpl]         = useState(false);
+  const [confirmDeleteTpl, setConfirmDeleteTpl] = useState(null);
 
   // Follow-up
   const [fuConfig, setFuConfig]     = useState({ enabled: false, hours: 2, action: 'note', message: '' });
@@ -114,6 +123,13 @@ export default function AdminPanel() {
     finally { setLoadingLabels(false); }
   }, [companyId]);
 
+  const loadTemplates = useCallback(async () => {
+    setLoadingTemplates(true);
+    try { setTemplates(await templatesAPI.getAll(companyId)); }
+    catch { toast.error('Error cargando plantillas'); }
+    finally { setLoadingTemplates(false); }
+  }, [companyId]);
+
   const loadFollowUp = useCallback(async () => {
     setLoadingFu(true);
     try { const d = await followUpAPI.getConfig(); setFuConfig({ enabled: false, hours: 2, action: 'note', message: '', ...d }); }
@@ -125,7 +141,8 @@ export default function AdminPanel() {
   useEffect(() => { if (tab === 'agents')  loadAgents();   }, [tab, loadAgents]);
   useEffect(() => { if (tab === 'flows')   loadFlows();    }, [tab, loadFlows]);
   useEffect(() => { if (tab === 'labels')  loadLabels();   }, [tab, loadLabels]);
-  useEffect(() => { if (tab === 'followup') loadFollowUp(); }, [tab, loadFollowUp]);
+  useEffect(() => { if (tab === 'templates') loadTemplates(); }, [tab, loadTemplates]);
+  useEffect(() => { if (tab === 'followup')  loadFollowUp();  }, [tab, loadFollowUp]);
 
   async function handleSaveLabel(e) {
     e.preventDefault();
@@ -155,6 +172,36 @@ export default function AdminPanel() {
       toast.success('Etiqueta eliminada');
     } catch { toast.error('Error al eliminar'); }
     finally { setConfirmDeleteLabel(null); }
+  }
+
+  async function handleSaveTpl(e) {
+    e.preventDefault();
+    if (!tplForm.shortcut.trim() || !tplForm.content.trim()) return;
+    setSavingTpl(true);
+    try {
+      if (editingTpl) {
+        const updated = await templatesAPI.update(editingTpl.id, tplForm);
+        setTemplates(prev => prev.map(t => t.id === editingTpl.id ? updated : t));
+        toast.success('Plantilla actualizada');
+      } else {
+        const created = await templatesAPI.create({ ...tplForm, company_id: companyId });
+        setTemplates(prev => [...prev, created]);
+        toast.success('Plantilla creada');
+      }
+      setTplForm({ shortcut: '', content: '' });
+      setEditingTpl(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Error al guardar plantilla');
+    } finally { setSavingTpl(false); }
+  }
+
+  async function handleDeleteTpl(id) {
+    try {
+      await templatesAPI.remove(id);
+      setTemplates(prev => prev.filter(t => t.id !== id));
+      toast.success('Plantilla eliminada');
+    } catch { toast.error('Error al eliminar'); }
+    finally { setConfirmDeleteTpl(null); }
   }
 
   async function handleSaveFollowUp(e) {
@@ -556,6 +603,144 @@ export default function AdminPanel() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── TAB: PLANTILLAS ── */}
+      {tab === 'templates' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* Formulario */}
+          <div className="card p-6">
+            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-5">
+              <MessageSquare size={16} className="text-brand-500" />
+              {editingTpl ? 'Editar plantilla' : 'Nueva plantilla'}
+            </h2>
+
+            <form onSubmit={handleSaveTpl} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  Atajo <span className="text-red-400">*</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-mono font-bold text-sm">/</span>
+                  <input
+                    type="text"
+                    placeholder="ej: hola, gracias, horario"
+                    value={tplForm.shortcut}
+                    onChange={e => setTplForm(p => ({ ...p, shortcut: e.target.value.replace(/\s/g, '').toLowerCase() }))}
+                    className="input flex-1"
+                    required
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">Escribe <span className="font-mono">/</span> + el atajo en la bandeja para usar esta plantilla.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  Mensaje <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  placeholder="Escribe el mensaje que se enviará al usar este atajo..."
+                  value={tplForm.content}
+                  onChange={e => setTplForm(p => ({ ...p, content: e.target.value }))}
+                  rows={5}
+                  className="input resize-none"
+                  required
+                />
+                {tplForm.content && (
+                  <div className="mt-2 p-3 bg-brand-50 border border-brand-100 rounded-xl">
+                    <p className="text-[10px] font-semibold text-brand-400 uppercase mb-1">Vista previa</p>
+                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{tplForm.content}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={savingTpl || !tplForm.shortcut || !tplForm.content}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <Save size={14} />
+                  {savingTpl ? 'Guardando...' : editingTpl ? 'Guardar cambios' : '+ Crear plantilla'}
+                </button>
+                {editingTpl && (
+                  <button
+                    type="button"
+                    onClick={() => { setEditingTpl(null); setTplForm({ shortcut: '', content: '' }); }}
+                    className="px-4 py-2 text-sm border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          {/* Lista de plantillas */}
+          <div className="card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold text-slate-800">
+                Plantillas creadas
+                <span className="ml-2 text-sm font-normal text-slate-400">({templates.length})</span>
+              </h2>
+              <button onClick={loadTemplates} disabled={loadingTemplates}
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-400 disabled:opacity-40 transition-colors">
+                <RefreshCw size={13} className={loadingTemplates ? 'animate-spin' : ''} />
+              </button>
+            </div>
+
+            {loadingTemplates ? (
+              <div className="space-y-2">
+                {[1,2,3].map(i => <div key={i} className="h-16 bg-slate-50 rounded-xl animate-pulse" />)}
+              </div>
+            ) : templates.length === 0 ? (
+              <div className="text-center py-10 text-slate-400">
+                <MessageSquare size={28} className="mx-auto mb-2 text-slate-200" />
+                <p className="text-sm">No hay plantillas. Crea la primera.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+                {templates.map(t => (
+                  <div key={t.id} className="group flex items-start gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-brand-50 text-brand-600 font-mono text-xs font-bold border border-brand-100">
+                        /{t.shortcut}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-600 flex-1 leading-relaxed line-clamp-3">{t.content}</p>
+                    <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => { setEditingTpl(t); setTplForm({ shortcut: t.shortcut, content: t.content }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className="p-1.5 text-slate-400 hover:text-brand-500 hover:bg-brand-50 rounded-lg transition-colors"
+                        title="Editar"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteTpl(t)}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delete plantilla */}
+      {confirmDeleteTpl && (
+        <ConfirmModal
+          title="Eliminar plantilla"
+          message={`¿Eliminar la plantilla "/${confirmDeleteTpl.shortcut}"? Los agentes dejarán de poder usarla.`}
+          onConfirm={() => handleDeleteTpl(confirmDeleteTpl.id)}
+          onCancel={() => setConfirmDeleteTpl(null)}
+        />
       )}
 
       {/* ── TAB: RECORDATORIOS ── */}
