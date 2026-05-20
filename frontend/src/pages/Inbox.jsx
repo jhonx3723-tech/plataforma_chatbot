@@ -187,6 +187,7 @@ export default function Inbox() {
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching]         = useState(false);
   const [imagePreview, setImagePreview]   = useState(null); // { file, url }
+  const [sendError, setSendError]         = useState(null);
   const [labelFilter, setLabelFilter]     = useState(null); // label id
   const [agentFilter, setAgentFilter]     = useState(null); // user id
   const [showLabelFilter, setShowLabelFilter] = useState(false);
@@ -408,6 +409,7 @@ export default function Inbox() {
 
   function handleReplyChange(e) {
     const val = e.target.value;
+    if (sendError) setSendError(null);
     setReply(val);
     if (!noteMode && val.startsWith('/')) {
       setTemplateQuery(val.slice(1));
@@ -469,6 +471,7 @@ export default function Inbox() {
     e.preventDefault();
     if (!reply.trim() || !selected) return;
     setSending(true);
+    setSendError(null);
     try {
       let msg;
       if (noteMode) {
@@ -480,7 +483,10 @@ export default function Inbox() {
       setReply('');
       setShowTemplates(false);
       setMessages(prev => [...prev, msg]);
-    } catch { /* silent */ }
+    } catch (err) {
+      const detail = err?.response?.data?.error || err?.message || 'Error al enviar';
+      setSendError(detail);
+    }
     finally { setSending(false); }
   }
 
@@ -1202,6 +1208,15 @@ export default function Inbox() {
                       </button>
                     </form>
                   </div>
+
+                  {/* Error al enviar */}
+                  {sendError && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600">
+                      <X size={12} className="flex-shrink-0" />
+                      <span className="flex-1">{sendError}</span>
+                      <button onClick={() => setSendError(null)} className="flex-shrink-0 hover:text-red-800"><X size={11} /></button>
+                    </div>
+                  )}
 
                   {/* Toggle nota / mensaje */}
                   <div className="flex justify-between items-center">
