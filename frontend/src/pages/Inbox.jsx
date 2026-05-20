@@ -863,148 +863,148 @@ export default function Inbox() {
           <>
             {/* Header */}
             <div className="bg-white border-b border-slate-200 shadow-sm">
-              {/* Fila 1: info + acciones de estado */}
-              <div className="px-4 py-3 flex items-center justify-between gap-3">
-                {/* Info contacto */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm ${
-                    selected.status === 'bot' ? 'bg-gradient-to-br from-brand-400 to-brand-600'
-                    : selected.status === 'human' ? 'bg-gradient-to-br from-amber-400 to-amber-600'
-                    : 'bg-gradient-to-br from-slate-300 to-slate-400'
-                  }`}>
-                    {avatarInitials(selected.contact_name || selected.user_phone.slice(-4))}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-bold text-slate-900 text-sm truncate">
-                        {selected.contact_name || selected.user_phone}
-                      </p>
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-bold border ${STATUS_COLORS[selected.status]}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[selected.status]}`} />
-                        {STATUS_LABELS[selected.status]}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      {selected.contact_name && (
-                        <span className="text-xs text-slate-400 font-mono">{selected.user_phone}</span>
-                      )}
-                      {user?.role === 'super_admin' && (
-                        <span className="text-xs text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">{selected.company_name}</span>
-                      )}
-                      {selected.assigned_agent_name && (
-                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-600 border border-violet-200">
-                          <div className="w-2 h-2 rounded-full bg-violet-400 flex items-center justify-center" />
-                          {selected.assigned_agent_name}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+
+              {/* Fila 1: avatar + info del contacto */}
+              <div className="px-4 pt-3 pb-2 flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-sm ${
+                  selected.status === 'bot'    ? 'bg-gradient-to-br from-brand-400 to-brand-600'
+                  : selected.status === 'human' ? 'bg-gradient-to-br from-amber-400 to-amber-600'
+                  : 'bg-gradient-to-br from-slate-300 to-slate-400'
+                }`}>
+                  {avatarInitials(selected.contact_name || selected.user_phone.slice(-4))}
                 </div>
 
-                {/* Botones de acción agrupados */}
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {/* Recordatorio */}
-                  <div className="relative" ref={reminderRef}>
-                    <button
-                      onClick={() => setShowReminder(v => !v)}
-                      title={selected.reminder_at ? `Recordatorio en ${reminderLabel(selected.reminder_at)}` : 'Agregar recordatorio'}
-                      className={`h-8 flex items-center gap-1 px-2.5 text-xs rounded-lg border transition-colors font-semibold ${
-                        selected.reminder_at && new Date(selected.reminder_at) > new Date()
-                          ? 'text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100'
-                          : 'text-slate-500 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Bell size={12} />
-                      {selected.reminder_at && new Date(selected.reminder_at) > new Date() && (
-                        <span>{reminderLabel(selected.reminder_at)}</span>
-                      )}
-                    </button>
-                    {showReminder && (
-                      <div className="absolute top-full right-0 mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-1.5">Recordarme en</p>
-                        {REMINDER_OPTIONS.map(opt => (
-                          <button key={opt.label} onClick={() => handleSetReminder(opt)}
-                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-sm text-slate-700 transition-colors">
-                            <Bell size={12} className="text-amber-400 flex-shrink-0" /> {opt.label}
-                          </button>
-                        ))}
-                        {selected.reminder_at && (
-                          <>
-                            <div className="border-t border-slate-100 my-1" />
-                            <button onClick={handleClearReminder}
-                              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-sm text-red-400 transition-colors">
-                              <BellOff size={12} className="flex-shrink-0" /> Quitar recordatorio
-                            </button>
-                          </>
-                        )}
-                      </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-slate-900 text-sm truncate leading-tight">
+                    {selected.contact_name || selected.user_phone}
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    {selected.contact_name && (
+                      <span className="text-[11px] text-slate-400 font-mono">{selected.user_phone}</span>
+                    )}
+                    {user?.role === 'super_admin' && (
+                      <span className="text-[11px] text-slate-400">· {selected.company_name}</span>
+                    )}
+                    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-bold border ${STATUS_COLORS[selected.status]}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[selected.status]}`} />
+                      {STATUS_LABELS[selected.status]}
+                    </span>
+                    {selected.assigned_agent_name && (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-600 border border-violet-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                        {selected.assigned_agent_name}
+                      </span>
                     )}
                   </div>
-
-                  {/* Asignar */}
-                  {agents.length > 0 && (
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowAssign(v => !v)}
-                        className={`h-8 flex items-center gap-1 px-2.5 text-xs rounded-lg border transition-colors font-semibold ${
-                          selected.assigned_to
-                            ? 'text-violet-600 border-violet-200 bg-violet-50 hover:bg-violet-100'
-                            : 'text-slate-500 border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        <UserPlus size={12} />
-                        <span className="hidden sm:inline">{selected.assigned_agent_name || 'Asignar'}</span>
-                        <ChevronDown size={10} />
-                      </button>
-                      {showAssign && (
-                        <AssignDropdown
-                          agents={agents}
-                          assigned={selected.assigned_to}
-                          currentUserId={user?.id}
-                          onAssign={handleAssign}
-                          onClose={() => setShowAssign(false)}
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  {/* Separador */}
-                  <div className="w-px h-5 bg-slate-200 mx-0.5" />
-
-                  {/* Estado: Reiniciar / Bot / Tomar / Cerrar */}
-                  <button onClick={handleRestartBot} title="Reiniciar bot"
-                    className="h-8 w-8 flex items-center justify-center text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">
-                    <RotateCcw size={13} />
-                  </button>
-                  {selected.status !== 'bot' && (
-                    <button onClick={() => handleStatus('bot')}
-                      className="h-8 flex items-center gap-1 px-2.5 text-xs text-brand-600 border border-brand-200 rounded-lg hover:bg-brand-50 transition-colors font-semibold">
-                      <Bot size={12} /> <span className="hidden sm:inline">Bot</span>
-                    </button>
-                  )}
-                  {selected.status !== 'human' && (
-                    <button onClick={() => handleStatus('human')}
-                      className="h-8 flex items-center gap-1 px-2.5 text-xs text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors font-semibold">
-                      <UserCheck size={12} /> <span className="hidden sm:inline">Tomar</span>
-                    </button>
-                  )}
-                  {selected.status !== 'closed' && (
-                    <button onClick={() => handleStatus('closed')}
-                      className="h-8 flex items-center gap-1 px-2.5 text-xs text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors font-semibold">
-                      <X size={12} /> <span className="hidden sm:inline">Cerrar</span>
-                    </button>
-                  )}
                 </div>
               </div>
 
               {/* Fila 2: etiquetas */}
-              <div className="px-4 pb-2.5">
+              <div className="px-4 pb-2">
                 <LabelSelector
                   conversation={selected}
                   labels={labels}
                   onLabelsChange={handleLabelsChange}
                   companyId={companyId}
                 />
+              </div>
+
+              {/* Fila 3: barra de acciones */}
+              <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/60 flex items-center gap-1.5 overflow-x-auto">
+
+                {/* Recordatorio */}
+                <div className="relative flex-shrink-0" ref={reminderRef}>
+                  <button
+                    onClick={() => setShowReminder(v => !v)}
+                    title={selected.reminder_at ? `Recordatorio en ${reminderLabel(selected.reminder_at)}` : 'Agregar recordatorio'}
+                    className={`h-7 flex items-center gap-1.5 px-2.5 text-xs rounded-lg border transition-colors font-semibold whitespace-nowrap ${
+                      selected.reminder_at && new Date(selected.reminder_at) > new Date()
+                        ? 'text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100'
+                        : 'text-slate-500 border-slate-200 bg-white hover:bg-slate-100'
+                    }`}
+                  >
+                    <Bell size={11} />
+                    {selected.reminder_at && new Date(selected.reminder_at) > new Date()
+                      ? reminderLabel(selected.reminder_at)
+                      : 'Recordar'}
+                  </button>
+                  {showReminder && (
+                    <div className="absolute top-full left-0 mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-1.5">Recordarme en</p>
+                      {REMINDER_OPTIONS.map(opt => (
+                        <button key={opt.label} onClick={() => handleSetReminder(opt)}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-sm text-slate-700 transition-colors">
+                          <Bell size={12} className="text-amber-400 flex-shrink-0" /> {opt.label}
+                        </button>
+                      ))}
+                      {selected.reminder_at && (
+                        <>
+                          <div className="border-t border-slate-100 my-1" />
+                          <button onClick={handleClearReminder}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-sm text-red-400 transition-colors">
+                            <BellOff size={12} className="flex-shrink-0" /> Quitar recordatorio
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Asignar */}
+                {agents.length > 0 && (
+                  <div className="relative flex-shrink-0">
+                    <button
+                      onClick={() => setShowAssign(v => !v)}
+                      className={`h-7 flex items-center gap-1.5 px-2.5 text-xs rounded-lg border transition-colors font-semibold whitespace-nowrap ${
+                        selected.assigned_to
+                          ? 'text-violet-600 border-violet-200 bg-violet-50 hover:bg-violet-100'
+                          : 'text-slate-500 border-slate-200 bg-white hover:bg-slate-100'
+                      }`}
+                    >
+                      <UserPlus size={11} />
+                      {selected.assigned_agent_name || 'Asignar'}
+                      <ChevronDown size={10} />
+                    </button>
+                    {showAssign && (
+                      <AssignDropdown
+                        agents={agents}
+                        assigned={selected.assigned_to}
+                        currentUserId={user?.id}
+                        onAssign={handleAssign}
+                        onClose={() => setShowAssign(false)}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Separador */}
+                <div className="flex-1" />
+
+                {/* Reiniciar */}
+                <button onClick={handleRestartBot} title="Reiniciar bot"
+                  className="h-7 w-7 flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 border border-slate-200 bg-white rounded-lg transition-colors flex-shrink-0">
+                  <RotateCcw size={12} />
+                </button>
+
+                {/* Estado */}
+                {selected.status !== 'bot' && (
+                  <button onClick={() => handleStatus('bot')}
+                    className="h-7 flex items-center gap-1 px-2.5 text-xs text-brand-600 border border-brand-200 bg-white rounded-lg hover:bg-brand-50 transition-colors font-semibold flex-shrink-0 whitespace-nowrap">
+                    <Bot size={11} /> Bot
+                  </button>
+                )}
+                {selected.status !== 'human' && (
+                  <button onClick={() => handleStatus('human')}
+                    className="h-7 flex items-center gap-1 px-2.5 text-xs text-amber-600 border border-amber-200 bg-white rounded-lg hover:bg-amber-50 transition-colors font-semibold flex-shrink-0 whitespace-nowrap">
+                    <UserCheck size={11} /> Tomar
+                  </button>
+                )}
+                {selected.status !== 'closed' && (
+                  <button onClick={() => handleStatus('closed')}
+                    className="h-7 flex items-center gap-1 px-2.5 text-xs text-slate-500 border border-slate-200 bg-white rounded-lg hover:bg-slate-100 transition-colors font-semibold flex-shrink-0 whitespace-nowrap">
+                    <X size={11} /> Cerrar
+                  </button>
+                )}
               </div>
             </div>
 
