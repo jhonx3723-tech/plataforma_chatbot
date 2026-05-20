@@ -18,6 +18,7 @@ const labelsRouter        = require('./routes/labels');
 const reportsRouter       = require('./routes/reports');
 
 const { sendText } = require('./services/whatsapp');
+const supabase     = require('./supabase');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
