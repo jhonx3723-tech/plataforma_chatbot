@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   Send, Bot, UserCheck, X, RefreshCw, Search, MessageSquare,
   RotateCcw, UserPlus, StickyNote, ChevronDown, Check, Paperclip, Image, Tag, Filter,
+  Bell, BellOff, Zap,
 } from 'lucide-react';
 import ContactPanel from '../components/inbox/ContactPanel';
 import TemplatePopover from '../components/inbox/TemplatePopover';
@@ -66,6 +67,56 @@ function useTabTitle(unread) {
     document.title = unread > 0 ? `(${unread}) Bandeja — BotBuilder` : 'Bandeja — BotBuilder';
     return () => { document.title = 'BotBuilder'; };
   }, [unread]);
+}
+
+// ── Quick replies: top N plantillas más usadas ────────────────────────────────
+function trackTemplate(id) {
+  try {
+    const u = JSON.parse(localStorage.getItem('tplUsage') || '{}');
+    u[id] = (u[id] || 0) + 1;
+    localStorage.setItem('tplUsage', JSON.stringify(u));
+  } catch {}
+}
+
+function topTemplates(templates, n = 5) {
+  try {
+    const u = JSON.parse(localStorage.getItem('tplUsage') || '{}');
+    return [...templates].sort((a, b) => (u[b.id] || 0) - (u[a.id] || 0)).slice(0, n);
+  } catch {
+    return templates.slice(0, n);
+  }
+}
+
+// ── Opciones de recordatorio ──────────────────────────────────────────────────
+const REMINDER_OPTIONS = [
+  { label: '30 minutos', minutes: 30 },
+  { label: '1 hora',     minutes: 60 },
+  { label: '2 horas',    minutes: 120 },
+  { label: '4 horas',    minutes: 240 },
+  { label: 'Mañana 9am', minutes: null, special: 'tomorrow9' },
+];
+
+function calcRemindAt(opt) {
+  if (opt.special === 'tomorrow9') {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    return d.toISOString();
+  }
+  return new Date(Date.now() + opt.minutes * 60000).toISOString();
+}
+
+function reminderLabel(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = d - now;
+  if (diff <= 0) return 'Vencido';
+  const mins = Math.round(diff / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.round(diff / 3600000);
+  if (hrs < 24) return `${hrs}h`;
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
 }
 
 // ── Dropdown de asignación ─────────────────────────────────────────────────────
@@ -140,6 +191,9 @@ export default function Inbox() {
   const [agentFilter, setAgentFilter]     = useState(null); // user id
   const [showLabelFilter, setShowLabelFilter] = useState(false);
   const [showAgentFilter, setShowAgentFilter] = useState(false);
+  const [showReminder, setShowReminder]   = useState(false);
+  const [reminderToasts, setReminderToasts] = useState([]); // { id, conv }
+
 
   const messagesEndRef    = useRef(null);
   const pollRef           = useRef(null);
@@ -149,6 +203,7 @@ export default function Inbox() {
   const fileInputRef      = useRef(null);
   const labelFilterRef    = useRef(null);
   const agentFilterRef    = useRef(null);
+  const reminderRef       = useRef(null);
 
   selectedRef.current = selected;
 
@@ -186,14 +241,41 @@ export default function Inbox() {
     }
   }, [companyId, user?.company_id]);
 
-  // Cerrar dropdowns de filtro al hacer click fuera
+  // Cerrar dropdowns de filtro y reminder al hacer click fuera
   useEffect(() => {
     function handler(e) {
       if (labelFilterRef.current && !labelFilterRef.current.contains(e.target)) setShowLabelFilter(false);
       if (agentFilterRef.current && !agentFilterRef.current.contains(e.target)) setShowAgentFilter(false);
+      if (reminderRef.current && !reminderRef.current.contains(e.target)) setShowReminder(false);
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Verificar recordatorios pendientes cada 60 segundos
+  useEffect(() => {
+    async function checkReminders() {
+      try {
+        const due = await conversationsAPI.getPendingReminders();
+        if (!due.length) return;
+        setReminderToasts(prev => {
+          const existingIds = new Set(prev.map(t => t.conv.id));
+          const newOnes = due.filter(c => !existingIds.has(c.id)).map(c => ({ id: Date.now() + c.id, conv: c }));
+          return [...prev, ...newOnes];
+        });
+        // Limpiar recordatorios vencidos en el estado local
+        for (const conv of due) {
+          await conversationsAPI.clearReminder(conv.id);
+          setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, reminder_at: null } : c));
+          if (selectedRef.current?.id === conv.id) setSelected(p => ({ ...p, reminder_at: null }));
+        }
+        // Notificación del navegador
+        due.forEach(c => showBrowserNotification(c.id, '⏰ Recordatorio', c.contact_name || c.user_phone));
+      } catch {}
+    }
+    checkReminders();
+    const interval = setInterval(checkReminders, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadConversations = useCallback(async () => {
@@ -433,6 +515,27 @@ export default function Inbox() {
     } catch { /* silent */ }
   }
 
+  async function handleSetReminder(opt) {
+    if (!selected) return;
+    setShowReminder(false);
+    const remind_at = calcRemindAt(opt);
+    try {
+      await conversationsAPI.setReminder(selected.id, { remind_at });
+      setSelected(prev => ({ ...prev, reminder_at: remind_at }));
+      setConversations(prev => prev.map(c => c.id === selected.id ? { ...c, reminder_at: remind_at } : c));
+    } catch {}
+  }
+
+  async function handleClearReminder() {
+    if (!selected) return;
+    setShowReminder(false);
+    try {
+      await conversationsAPI.clearReminder(selected.id);
+      setSelected(prev => ({ ...prev, reminder_at: null }));
+      setConversations(prev => prev.map(c => c.id === selected.id ? { ...c, reminder_at: null } : c));
+    } catch {}
+  }
+
   function handleLabelsChange(newLabelIds, newLabelsArray) {
     setSelected(prev => ({ ...prev, label_ids: newLabelIds }));
     setConversations(prev => prev.map(c => c.id === selected?.id ? { ...c, label_ids: newLabelIds } : c));
@@ -669,6 +772,11 @@ export default function Inbox() {
                           {conv.contact_name || conv.user_phone}
                         </p>
                         <div className="flex items-center gap-1 flex-shrink-0">
+                          {conv.reminder_at && new Date(conv.reminder_at) > new Date() && (
+                            <span title={`Recordatorio en ${reminderLabel(conv.reminder_at)}`} className="text-amber-400">
+                              <Bell size={10} />
+                            </span>
+                          )}
                           {conv.unread > 0 && (
                             <span className="w-4 h-4 bg-brand-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
                               {conv.unread > 9 ? '9+' : conv.unread}
@@ -790,6 +898,50 @@ export default function Inbox() {
 
                 {/* Acciones derecha */}
                 <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                  {/* Recordatorio */}
+                  <div className="relative" ref={reminderRef}>
+                    <button
+                      onClick={() => setShowReminder(v => !v)}
+                      title={selected.reminder_at ? `Recordatorio en ${reminderLabel(selected.reminder_at)}` : 'Agregar recordatorio'}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl border transition-colors font-semibold ${
+                        selected.reminder_at && new Date(selected.reminder_at) > new Date()
+                          ? 'text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100'
+                          : 'text-slate-500 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Bell size={13} />
+                      {selected.reminder_at && new Date(selected.reminder_at) > new Date()
+                        ? reminderLabel(selected.reminder_at)
+                        : null}
+                    </button>
+                    {showReminder && (
+                      <div className="absolute top-full right-0 mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-1.5">Recordarme en</p>
+                        {REMINDER_OPTIONS.map(opt => (
+                          <button
+                            key={opt.label}
+                            onClick={() => handleSetReminder(opt)}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-sm text-slate-700 transition-colors"
+                          >
+                            <Bell size={12} className="text-amber-400 flex-shrink-0" />
+                            {opt.label}
+                          </button>
+                        ))}
+                        {selected.reminder_at && (
+                          <>
+                            <div className="border-t border-slate-100 my-1" />
+                            <button
+                              onClick={handleClearReminder}
+                              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-sm text-red-400 transition-colors"
+                            >
+                              <BellOff size={12} className="flex-shrink-0" /> Quitar recordatorio
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Asignar */}
                   {agents.length > 0 && (
                     <div className="relative">
@@ -982,6 +1134,23 @@ export default function Inbox() {
                 </div>
               ) : (
                 <div className="space-y-2">
+                  {/* Quick reply buttons — top 5 plantillas más usadas */}
+                  {templates.length > 0 && !noteMode && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      <Zap size={11} className="text-slate-300 self-center flex-shrink-0" />
+                      {topTemplates(templates).map(t => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => { trackTemplate(t.id); handleTemplateSelect(t.content); }}
+                          className="text-xs px-2.5 py-1 bg-slate-50 hover:bg-brand-50 hover:text-brand-600 text-slate-600 rounded-full border border-slate-200 hover:border-brand-200 transition-colors truncate max-w-[130px]"
+                          title={t.content}
+                        >
+                          {t.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="relative">
                     {showTemplates && !noteMode && (
                       <TemplatePopover templates={templates} query={templateQuery} onSelect={handleTemplateSelect} onClose={() => setShowTemplates(false)} />
@@ -1056,6 +1225,39 @@ export default function Inbox() {
           </>
         )}
       </div>
+
+      {/* ── Toasts de recordatorio ──────────────────────────────────────────── */}
+      {reminderToasts.length > 0 && (
+        <div className="fixed bottom-5 right-5 flex flex-col gap-2 z-[100]">
+          {reminderToasts.map(t => (
+            <div key={t.id} className="flex items-start gap-3 bg-white border border-amber-200 shadow-xl rounded-2xl px-4 py-3 max-w-xs">
+              <Bell size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-800">Recordatorio</p>
+                <p className="text-xs text-slate-500 truncate">{t.conv.contact_name || t.conv.user_phone}</p>
+                {t.conv.reminder_note && <p className="text-xs text-slate-400 mt-0.5 truncate">{t.conv.reminder_note}</p>}
+              </div>
+              <div className="flex flex-col gap-1 flex-shrink-0">
+                <button
+                  onClick={() => {
+                    setReminderToasts(prev => prev.filter(x => x.id !== t.id));
+                    selectConversation(t.conv);
+                  }}
+                  className="text-xs text-brand-500 font-semibold hover:underline"
+                >
+                  Ver
+                </button>
+                <button
+                  onClick={() => setReminderToasts(prev => prev.filter(x => x.id !== t.id))}
+                  className="text-xs text-slate-400 hover:text-slate-600"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Panel de contacto ────────────────────────────────────────────────── */}
       {selected && (

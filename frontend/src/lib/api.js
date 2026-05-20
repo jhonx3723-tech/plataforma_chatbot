@@ -39,7 +39,10 @@ export const conversationsAPI = {
   setStatus:  (id, status)  => api.put(`/conversations/${id}/status`, { status }).then(r => r.data),
   assign:     (id, user_id) => api.put(`/conversations/${id}/assign`, { user_id }).then(r => r.data),
   restartBot: id            => api.post(`/conversations/${id}/restart-bot`).then(r => r.data),
-  getAgents:  (company_id)  => api.get('/conversations/agents', { params: { company_id } }).then(r => r.data),
+  getAgents:           (company_id)  => api.get('/conversations/agents', { params: { company_id } }).then(r => r.data),
+  setReminder:         (id, data)    => api.post(`/conversations/${id}/reminder`, data).then(r => r.data),
+  clearReminder:       (id)          => api.delete(`/conversations/${id}/reminder`).then(r => r.data),
+  getPendingReminders: ()            => api.get('/conversations/reminders/pending').then(r => r.data),
   sendImage:  (id, file, caption = '') => {
     const form = new FormData();
     form.append('file', file);

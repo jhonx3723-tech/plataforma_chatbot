@@ -34,6 +34,19 @@ router.get('/agents', authMiddleware, async (req, res) => {
   res.json(data || []);
 });
 
+// ── Recordatorios pendientes del usuario actual ───────────────────────────────
+router.get('/reminders/pending', authMiddleware, async (req, res) => {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('id, user_phone, contact_name, reminder_at, reminder_note')
+    .eq('reminder_user_id', req.user.id)
+    .not('reminder_at', 'is', null)
+    .lte('reminder_at', new Date().toISOString());
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
 // ── Listado de conversaciones ─────────────────────────────────────────────────
 router.get('/', authMiddleware, async (req, res) => {
   const limit  = Math.min(50, parseInt(req.query.limit)  || 30);
@@ -357,6 +370,32 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
     .single();
 
   res.json(updated);
+});
+
+// ── Recordatorio en conversación ─────────────────────────────────────────────
+router.post('/:id/reminder', authMiddleware, async (req, res) => {
+  const { remind_at, note } = req.body;
+  if (!remind_at) return res.status(400).json({ error: 'remind_at requerido' });
+
+  const { data, error } = await supabase
+    .from('conversations')
+    .update({ reminder_at: remind_at, reminder_user_id: req.user.id, reminder_note: note || null })
+    .eq('id', req.params.id)
+    .select('id, reminder_at, reminder_note')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+router.delete('/:id/reminder', authMiddleware, async (req, res) => {
+  const { error } = await supabase
+    .from('conversations')
+    .update({ reminder_at: null, reminder_user_id: null, reminder_note: null })
+    .eq('id', req.params.id);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
 });
 
 // ── Enviar imagen ─────────────────────────────────────────────────────────────
