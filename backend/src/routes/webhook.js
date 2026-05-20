@@ -46,11 +46,20 @@ router.post('/whatsapp/:companyId', async (req, res) => {
 
     const vars = { nombre: contactName, telefono: userPhone, empresa: company.name };
 
-    let userInput = null;
-    if (msg.type === 'text') userInput = msg.text.body.trim();
-    else if (msg.type === 'interactive') {
-      if (msg.interactive.type === 'button_reply') userInput = msg.interactive.button_reply.id;
-      else if (msg.interactive.type === 'list_reply') userInput = msg.interactive.list_reply.id;
+    let userInput   = null; // usado para la lógica del flujo (IDs de opciones)
+    let displayText = null; // guardado como mensaje visible en el chat
+
+    if (msg.type === 'text') {
+      userInput   = msg.text.body.trim();
+      displayText = userInput;
+    } else if (msg.type === 'interactive') {
+      if (msg.interactive.type === 'button_reply') {
+        userInput   = msg.interactive.button_reply.id;
+        displayText = msg.interactive.button_reply.title || userInput;
+      } else if (msg.interactive.type === 'list_reply') {
+        userInput   = msg.interactive.list_reply.id;
+        displayText = msg.interactive.list_reply.title || userInput;
+      }
     }
     if (!userInput) return;
 
@@ -90,10 +99,10 @@ router.post('/whatsapp/:companyId', async (req, res) => {
     if (contactName && contactName !== userPhone) contactPatch.name = contactName;
     await supabase.from('contacts').upsert(contactPatch, { onConflict: 'company_id,phone' });
 
-    await saveMessage(conv.id, company.id, 'inbound', userInput, 'user');
+    await saveMessage(conv.id, company.id, 'inbound', displayText, 'user');
     await supabase
       .from('conversations')
-      .update({ last_message: userInput, last_message_at: new Date().toISOString() })
+      .update({ last_message: displayText, last_message_at: new Date().toISOString() })
       .eq('id', conv.id);
 
     if (conv.status === 'human') return;
