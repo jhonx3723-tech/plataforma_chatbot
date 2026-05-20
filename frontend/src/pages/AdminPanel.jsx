@@ -5,15 +5,17 @@ import {
   CheckCircle2, Clock, Bot, KeyRound, Trash2,
   ToggleLeft, ToggleRight, RefreshCw, X, Zap, AlertCircle,
   ChevronRight, Play, Square, Tag, Plus, Pencil, Bell, Save, MessageSquare,
+  UserRound, Search, Building2, FileText, Phone,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI, flowsAPI, labelsAdminAPI, followUpAPI, templatesAPI } from '../lib/api';
+import { adminAPI, flowsAPI, labelsAdminAPI, followUpAPI, templatesAPI, contactsAPI } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
 import ConfirmModal from '../components/ui/ConfirmModal';
 
 const TABS = [
   { key: 'reports',    label: 'Reportes',      icon: BarChart2     },
   { key: 'agents',     label: 'Agentes',        icon: Users         },
+  { key: 'contacts',   label: 'Contactos',      icon: UserRound     },
   { key: 'flows',      label: 'Flujos',         icon: GitBranch     },
   { key: 'labels',     label: 'Etiquetas',      icon: Tag           },
   { key: 'templates',  label: 'Plantillas',     icon: MessageSquare },
@@ -60,6 +62,15 @@ export default function AdminPanel() {
   const [editingTpl, setEditingTpl]       = useState(null);
   const [savingTpl, setSavingTpl]         = useState(false);
   const [confirmDeleteTpl, setConfirmDeleteTpl] = useState(null);
+
+  // Contactos
+  const [contacts, setContacts]               = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [contactSearch, setContactSearch]     = useState('');
+  const [editingContact, setEditingContact]   = useState(null); // { id, name, company_name, notes, phone }
+  const [contactForm, setContactForm]         = useState({ name: '', company_name: '', notes: '' });
+  const [savingContact, setSavingContact]     = useState(false);
+  const [confirmDeleteContact, setConfirmDeleteContact] = useState(null);
 
   // Follow-up
   const [fuConfig, setFuConfig]     = useState({ enabled: false, hours: 2, action: 'note', message: '' });
@@ -130,6 +141,13 @@ export default function AdminPanel() {
     finally { setLoadingTemplates(false); }
   }, [companyId]);
 
+  const loadContacts = useCallback(async () => {
+    setLoadingContacts(true);
+    try { setContacts(await contactsAPI.getAll({ company_id: companyId })); }
+    catch { toast.error('Error cargando contactos'); }
+    finally { setLoadingContacts(false); }
+  }, [companyId]);
+
   const loadFollowUp = useCallback(async () => {
     setLoadingFu(true);
     try { const d = await followUpAPI.getConfig(); setFuConfig({ enabled: false, hours: 2, action: 'note', message: '', ...d }); }
@@ -138,11 +156,35 @@ export default function AdminPanel() {
   }, []);
 
   useEffect(() => { loadStats(); }, [loadStats]);
-  useEffect(() => { if (tab === 'agents')  loadAgents();   }, [tab, loadAgents]);
-  useEffect(() => { if (tab === 'flows')   loadFlows();    }, [tab, loadFlows]);
-  useEffect(() => { if (tab === 'labels')  loadLabels();   }, [tab, loadLabels]);
+  useEffect(() => { if (tab === 'agents')   loadAgents();   }, [tab, loadAgents]);
+  useEffect(() => { if (tab === 'contacts') loadContacts(); }, [tab, loadContacts]);
+  useEffect(() => { if (tab === 'flows')    loadFlows();    }, [tab, loadFlows]);
+  useEffect(() => { if (tab === 'labels')   loadLabels();   }, [tab, loadLabels]);
   useEffect(() => { if (tab === 'templates') loadTemplates(); }, [tab, loadTemplates]);
   useEffect(() => { if (tab === 'followup')  loadFollowUp();  }, [tab, loadFollowUp]);
+
+  async function handleSaveContact(e) {
+    e.preventDefault();
+    if (!editingContact) return;
+    setSavingContact(true);
+    try {
+      const updated = await contactsAPI.update(editingContact.id, contactForm);
+      setContacts(prev => prev.map(c => c.id === editingContact.id ? { ...c, ...updated } : c));
+      setEditingContact(null);
+      toast.success('Contacto actualizado');
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Error al guardar');
+    } finally { setSavingContact(false); }
+  }
+
+  async function handleDeleteContact(id) {
+    try {
+      await contactsAPI.remove(id);
+      setContacts(prev => prev.filter(c => c.id !== id));
+      toast.success('Contacto eliminado');
+    } catch { toast.error('Error al eliminar'); }
+    finally { setConfirmDeleteContact(null); }
+  }
 
   async function handleSaveLabel(e) {
     e.preventDefault();
@@ -447,6 +489,185 @@ export default function AdminPanel() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── TAB: CONTACTOS ── */}
+      {tab === 'contacts' && (
+        <div className="space-y-4">
+          {/* Buscador + contador */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre o teléfono..."
+                value={contactSearch}
+                onChange={e => setContactSearch(e.target.value)}
+                className="input pl-8 text-sm w-full"
+              />
+            </div>
+            <p className="text-sm text-slate-400 flex-shrink-0">
+              {contacts.filter(c =>
+                !contactSearch.trim() ||
+                (c.name || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
+                (c.phone || '').includes(contactSearch)
+              ).length} contacto{contacts.length !== 1 ? 's' : ''}
+            </p>
+            <button onClick={loadContacts} disabled={loadingContacts}
+              className="p-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-500 disabled:opacity-40 transition-colors flex-shrink-0">
+              <RefreshCw size={14} className={loadingContacts ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
+          {/* Formulario de edición */}
+          {editingContact && (
+            <div className="card p-5 border-brand-200 bg-brand-50/30">
+              <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <Pencil size={14} className="text-brand-500" />
+                Editando: <span className="text-brand-600">{editingContact.phone}</span>
+              </h3>
+              <form onSubmit={handleSaveContact} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Nombre</label>
+                  <div className="relative">
+                    <UserRound size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" />
+                    <input type="text" className="input pl-7 text-sm w-full"
+                      placeholder="Nombre del contacto"
+                      value={contactForm.name}
+                      onChange={e => setContactForm(f => ({ ...f, name: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Empresa cliente</label>
+                  <div className="relative">
+                    <Building2 size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" />
+                    <input type="text" className="input pl-7 text-sm w-full"
+                      placeholder="Empresa"
+                      value={contactForm.company_name}
+                      onChange={e => setContactForm(f => ({ ...f, company_name: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Notas</label>
+                  <div className="relative">
+                    <FileText size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300" />
+                    <input type="text" className="input pl-7 text-sm w-full"
+                      placeholder="Notas internas"
+                      value={contactForm.notes}
+                      onChange={e => setContactForm(f => ({ ...f, notes: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="sm:col-span-3 flex justify-end gap-2">
+                  <button type="button" className="btn-secondary text-sm"
+                    onClick={() => setEditingContact(null)}>
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={savingContact} className="btn-primary text-sm flex items-center gap-2">
+                    <Save size={13} />
+                    {savingContact ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Lista */}
+          {loadingContacts ? (
+            <div className="space-y-2">
+              {[1,2,3,4].map(i => <div key={i} className="card p-4 h-16 animate-pulse" />)}
+            </div>
+          ) : (() => {
+            const filtered = contacts.filter(c =>
+              !contactSearch.trim() ||
+              (c.name || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
+              (c.phone || '').includes(contactSearch)
+            );
+            if (filtered.length === 0) return (
+              <div className="card text-center py-12">
+                <div className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                  <UserRound size={22} className="text-slate-300" />
+                </div>
+                <p className="text-sm font-semibold text-slate-500">
+                  {contactSearch ? 'Sin resultados' : 'No hay contactos registrados'}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {contactSearch ? 'Prueba con otro nombre o teléfono' : 'Los contactos se crean desde la bandeja de conversaciones'}
+                </p>
+              </div>
+            );
+            return (
+              <div className="card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Contacto</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Teléfono</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Empresa</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Notas</th>
+                      <th className="px-4 py-3 w-20" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {filtered.map(c => (
+                      <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-600 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                              {(c.name || c.phone || '?').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-800 truncate">{c.name || <span className="text-slate-400 font-normal">Sin nombre</span>}</p>
+                              <p className="text-xs text-slate-400 sm:hidden">{c.phone}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 hidden sm:table-cell">
+                          <span className="flex items-center gap-1.5 text-slate-600 font-mono text-xs">
+                            <Phone size={11} className="text-slate-300" />{c.phone}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs truncate max-w-[140px]">
+                          {c.company_name || <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 hidden lg:table-cell text-slate-400 text-xs truncate max-w-[160px]">
+                          {c.notes || <span className="text-slate-200">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 justify-end">
+                            <button
+                              onClick={() => { setEditingContact(c); setContactForm({ name: c.name || '', company_name: c.company_name || '', notes: c.notes || '' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-brand-500 hover:bg-brand-50 transition-colors"
+                              title="Editar"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteContact(c)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                              title="Eliminar"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {confirmDeleteContact && (
+        <ConfirmModal
+          title="Eliminar contacto"
+          message={`¿Eliminar el contacto "${confirmDeleteContact.name || confirmDeleteContact.phone}"? Se perderán los datos guardados.`}
+          danger confirmText="Eliminar"
+          onConfirm={() => handleDeleteContact(confirmDeleteContact.id)}
+          onCancel={() => setConfirmDeleteContact(null)}
+        />
       )}
 
       {/* ── TAB: FLUJOS ── */}

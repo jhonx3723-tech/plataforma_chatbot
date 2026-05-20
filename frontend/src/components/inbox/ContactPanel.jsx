@@ -9,6 +9,7 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
   const [form, setForm]         = useState({ name: '', company_name: '', notes: '' });
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
+  const [saveErr, setSaveErr]   = useState(null);
   const [collapsed, setCollapsed] = useState(false);
 
   const [agents, setAgents]           = useState([]);
@@ -43,19 +44,22 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
 
   async function handleSave() {
     setSaving(true);
+    setSaveErr(null);
     try {
-      const saved = await contactsAPI.save({
+      const result = await contactsAPI.save({
         phone:        conversation.user_phone,
         company_id:   companyId,
         name:         form.name        || null,
         company_name: form.company_name || null,
         notes:        form.notes       || null,
       });
-      setContact(saved);
+      setContact(result);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-      onContactUpdated?.(saved);
-    } catch { /* silent */ }
+      onContactUpdated?.(result);
+    } catch (err) {
+      setSaveErr(err?.response?.data?.error || 'Error al guardar');
+    }
     finally { setSaving(false); }
   }
 
@@ -196,7 +200,10 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
       </div>
 
       {/* Guardar contacto */}
-      <div className="p-4 border-t border-slate-100">
+      <div className="p-4 border-t border-slate-100 space-y-2">
+        {saveErr && (
+          <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-2.5 py-2">{saveErr}</p>
+        )}
         <button
           onClick={handleSave}
           disabled={saving || !dirty}
