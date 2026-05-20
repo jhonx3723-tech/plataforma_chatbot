@@ -862,84 +862,77 @@ export default function Inbox() {
         ) : (
           <>
             {/* Header */}
-            <div className="bg-white border-b border-slate-200 px-5 py-3 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                {/* Info izquierda */}
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5 ${
-                    selected.status === 'bot' ? 'bg-brand-500' : selected.status === 'human' ? 'bg-amber-500' : 'bg-slate-400'
+            <div className="bg-white border-b border-slate-200 shadow-sm">
+              {/* Fila 1: info + acciones de estado */}
+              <div className="px-4 py-3 flex items-center justify-between gap-3">
+                {/* Info contacto */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm ${
+                    selected.status === 'bot' ? 'bg-gradient-to-br from-brand-400 to-brand-600'
+                    : selected.status === 'human' ? 'bg-gradient-to-br from-amber-400 to-amber-600'
+                    : 'bg-gradient-to-br from-slate-300 to-slate-400'
                   }`}>
-                    {selected.user_phone.slice(-2)}
+                    {avatarInitials(selected.contact_name || selected.user_phone.slice(-4))}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-slate-900 text-sm truncate">{selected.contact_name || selected.user_phone}</p>
-                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                      {selected.contact_name && <span className="text-xs text-slate-400">{selected.user_phone}</span>}
-                      {user?.role === 'super_admin' && <span className="text-xs text-slate-400">{selected.company_name}</span>}
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[selected.status]}`}>
-                        <span className={`w-1 h-1 rounded-full ${STATUS_DOT[selected.status]}`} />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-bold text-slate-900 text-sm truncate">
+                        {selected.contact_name || selected.user_phone}
+                      </p>
+                      <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-bold border ${STATUS_COLORS[selected.status]}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[selected.status]}`} />
                         {STATUS_LABELS[selected.status]}
                       </span>
-                      {/* Agente asignado badge */}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      {selected.contact_name && (
+                        <span className="text-xs text-slate-400 font-mono">{selected.user_phone}</span>
+                      )}
+                      {user?.role === 'super_admin' && (
+                        <span className="text-xs text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">{selected.company_name}</span>
+                      )}
                       {selected.assigned_agent_name && (
                         <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-600 border border-violet-200">
-                          <div className="w-2.5 h-2.5 rounded-full bg-violet-200 text-[7px] font-bold flex items-center justify-center">
-                            {avatarInitials(selected.assigned_agent_name)}
-                          </div>
+                          <div className="w-2 h-2 rounded-full bg-violet-400 flex items-center justify-center" />
                           {selected.assigned_agent_name}
                         </span>
                       )}
                     </div>
-                    {/* Labels */}
-                    <div className="mt-1.5">
-                      <LabelSelector
-                        conversation={selected}
-                        labels={labels}
-                        onLabelsChange={handleLabelsChange}
-                        companyId={companyId}
-                      />
-                    </div>
                   </div>
                 </div>
 
-                {/* Acciones derecha */}
-                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                {/* Botones de acción agrupados */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                   {/* Recordatorio */}
                   <div className="relative" ref={reminderRef}>
                     <button
                       onClick={() => setShowReminder(v => !v)}
                       title={selected.reminder_at ? `Recordatorio en ${reminderLabel(selected.reminder_at)}` : 'Agregar recordatorio'}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl border transition-colors font-semibold ${
+                      className={`h-8 flex items-center gap-1 px-2.5 text-xs rounded-lg border transition-colors font-semibold ${
                         selected.reminder_at && new Date(selected.reminder_at) > new Date()
                           ? 'text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100'
-                          : 'text-slate-500 border-slate-200 hover:bg-slate-100'
+                          : 'text-slate-500 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      <Bell size={13} />
-                      {selected.reminder_at && new Date(selected.reminder_at) > new Date()
-                        ? reminderLabel(selected.reminder_at)
-                        : null}
+                      <Bell size={12} />
+                      {selected.reminder_at && new Date(selected.reminder_at) > new Date() && (
+                        <span>{reminderLabel(selected.reminder_at)}</span>
+                      )}
                     </button>
                     {showReminder && (
                       <div className="absolute top-full right-0 mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1">
                         <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-1.5">Recordarme en</p>
                         {REMINDER_OPTIONS.map(opt => (
-                          <button
-                            key={opt.label}
-                            onClick={() => handleSetReminder(opt)}
-                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-sm text-slate-700 transition-colors"
-                          >
-                            <Bell size={12} className="text-amber-400 flex-shrink-0" />
-                            {opt.label}
+                          <button key={opt.label} onClick={() => handleSetReminder(opt)}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-sm text-slate-700 transition-colors">
+                            <Bell size={12} className="text-amber-400 flex-shrink-0" /> {opt.label}
                           </button>
                         ))}
                         {selected.reminder_at && (
                           <>
                             <div className="border-t border-slate-100 my-1" />
-                            <button
-                              onClick={handleClearReminder}
-                              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-sm text-red-400 transition-colors"
-                            >
+                            <button onClick={handleClearReminder}
+                              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-sm text-red-400 transition-colors">
                               <BellOff size={12} className="flex-shrink-0" /> Quitar recordatorio
                             </button>
                           </>
@@ -953,16 +946,15 @@ export default function Inbox() {
                     <div className="relative">
                       <button
                         onClick={() => setShowAssign(v => !v)}
-                        title="Asignar agente"
-                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl border transition-colors font-semibold ${
+                        className={`h-8 flex items-center gap-1 px-2.5 text-xs rounded-lg border transition-colors font-semibold ${
                           selected.assigned_to
                             ? 'text-violet-600 border-violet-200 bg-violet-50 hover:bg-violet-100'
-                            : 'text-slate-500 border-slate-200 hover:bg-slate-100'
+                            : 'text-slate-500 border-slate-200 hover:bg-slate-50'
                         }`}
                       >
-                        <UserPlus size={13} />
-                        {selected.assigned_agent_name || 'Asignar'}
-                        <ChevronDown size={11} />
+                        <UserPlus size={12} />
+                        <span className="hidden sm:inline">{selected.assigned_agent_name || 'Asignar'}</span>
+                        <ChevronDown size={10} />
                       </button>
                       {showAssign && (
                         <AssignDropdown
@@ -976,29 +968,43 @@ export default function Inbox() {
                     </div>
                   )}
 
-                  <button
-                    onClick={handleRestartBot}
-                    title="Reiniciar bot"
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-emerald-600 border border-emerald-200 rounded-xl hover:bg-emerald-50 transition-colors font-semibold"
-                  >
-                    <RotateCcw size={13} /> Reiniciar
+                  {/* Separador */}
+                  <div className="w-px h-5 bg-slate-200 mx-0.5" />
+
+                  {/* Estado: Reiniciar / Bot / Tomar / Cerrar */}
+                  <button onClick={handleRestartBot} title="Reiniciar bot"
+                    className="h-8 w-8 flex items-center justify-center text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">
+                    <RotateCcw size={13} />
                   </button>
                   {selected.status !== 'bot' && (
-                    <button onClick={() => handleStatus('bot')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-brand-600 border border-brand-200 rounded-xl hover:bg-brand-50 transition-colors font-semibold">
-                      <Bot size={13} /> Bot
+                    <button onClick={() => handleStatus('bot')}
+                      className="h-8 flex items-center gap-1 px-2.5 text-xs text-brand-600 border border-brand-200 rounded-lg hover:bg-brand-50 transition-colors font-semibold">
+                      <Bot size={12} /> <span className="hidden sm:inline">Bot</span>
                     </button>
                   )}
                   {selected.status !== 'human' && (
-                    <button onClick={() => handleStatus('human')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-amber-600 border border-amber-200 rounded-xl hover:bg-amber-50 transition-colors font-semibold">
-                      <UserCheck size={13} /> Tomar
+                    <button onClick={() => handleStatus('human')}
+                      className="h-8 flex items-center gap-1 px-2.5 text-xs text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors font-semibold">
+                      <UserCheck size={12} /> <span className="hidden sm:inline">Tomar</span>
                     </button>
                   )}
                   {selected.status !== 'closed' && (
-                    <button onClick={() => handleStatus('closed')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors font-semibold">
-                      <X size={13} /> Cerrar
+                    <button onClick={() => handleStatus('closed')}
+                      className="h-8 flex items-center gap-1 px-2.5 text-xs text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors font-semibold">
+                      <X size={12} /> <span className="hidden sm:inline">Cerrar</span>
                     </button>
                   )}
                 </div>
+              </div>
+
+              {/* Fila 2: etiquetas */}
+              <div className="px-4 pb-2.5">
+                <LabelSelector
+                  conversation={selected}
+                  labels={labels}
+                  onLabelsChange={handleLabelsChange}
+                  companyId={companyId}
+                />
               </div>
             </div>
 
@@ -1093,43 +1099,48 @@ export default function Inbox() {
                 </div>
               ) : selected.status === 'bot' ? (
                 <div className="space-y-2">
-                  {/* En modo bot también se puede dejar nota interna */}
-                  <div className="relative">
-                    {showTemplates && noteMode === false && (
-                      <TemplatePopover templates={templates} query={templateQuery} onSelect={handleTemplateSelect} onClose={() => setShowTemplates(false)} />
-                    )}
-                    {noteMode ? (
+                  {noteMode ? (
+                    <div className="relative">
+                      {showTemplates && (
+                        <TemplatePopover templates={templates} query={templateQuery} onSelect={handleTemplateSelect} onClose={() => setShowTemplates(false)} />
+                      )}
                       <form onSubmit={handleSend} className="flex gap-2">
                         <input
                           ref={replyInputRef}
                           type="text"
                           value={reply}
                           onChange={handleReplyChange}
-                          placeholder={inputPlaceholder}
+                          placeholder="Escribe una nota interna..."
                           className="flex-1 px-4 py-2.5 text-sm border border-amber-300 bg-amber-50 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
                           disabled={sending}
                         />
                         <button type="submit" disabled={!reply.trim() || sending}
-                          className="px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2 text-sm font-semibold">
+                          className="px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 disabled:opacity-40 transition-colors flex items-center gap-2 text-sm font-semibold">
                           <StickyNote size={15} /> {sending ? '...' : 'Nota'}
                         </button>
                       </form>
-                    ) : (
-                      <div className="flex items-center justify-center gap-2 py-1 text-sm text-slate-400">
-                        <Bot size={15} className="text-brand-400" />
-                        El bot está manejando esta conversación.
-                        <button onClick={() => handleStatus('human')} className="text-amber-500 font-semibold hover:underline text-xs">
-                          Tomar control
-                        </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 px-2 py-1 bg-brand-50 border border-brand-100 rounded-xl">
+                      <div className="flex items-center gap-2 text-sm text-brand-700">
+                        <div className="w-6 h-6 bg-brand-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Bot size={13} className="text-white" />
+                        </div>
+                        <span className="font-medium">Bot activo en esta conversación</span>
                       </div>
-                    )}
-                  </div>
-                  {/* Toggle nota */}
+                      <button
+                        onClick={() => handleStatus('human')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors flex-shrink-0 shadow-sm"
+                      >
+                        <UserCheck size={12} /> Tomar control
+                      </button>
+                    </div>
+                  )}
                   <div className="flex justify-center">
                     <button
                       type="button"
                       onClick={() => { setNoteMode(v => !v); setReply(''); setShowTemplates(false); }}
-                      className={`text-xs flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors ${
+                      className={`text-xs flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors ${
                         noteMode ? 'bg-amber-100 text-amber-600 font-semibold' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'
                       }`}
                     >
