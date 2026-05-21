@@ -3,8 +3,8 @@ import { conversationsAPI, templatesAPI, labelsAPI, API_BASE } from '../lib/api'
 import { useAuth } from '../context/AuthContext';
 import {
   Send, Bot, UserCheck, X, RefreshCw, Search, MessageSquare,
-  RotateCcw, UserPlus, StickyNote, ChevronDown, Check, Paperclip, Image, Tag, Filter,
-  Bell, BellOff, Zap,
+  RotateCcw, UserPlus, StickyNote, ChevronDown, Check, Paperclip, Tag, Filter,
+  Bell, BellOff, Zap, ArrowLeft, Info,
 } from 'lucide-react';
 import ContactPanel from '../components/inbox/ContactPanel';
 import TemplatePopover from '../components/inbox/TemplatePopover';
@@ -194,6 +194,8 @@ export default function Inbox() {
   const [showAgentFilter, setShowAgentFilter] = useState(false);
   const [showReminder, setShowReminder]   = useState(false);
   const [reminderToasts, setReminderToasts] = useState([]); // { id, conv }
+  const [mobilePanel, setMobilePanel]     = useState('list'); // 'list' | 'chat'
+  const [showContactMobile, setShowContactMobile] = useState(false);
 
 
   const messagesEndRef    = useRef(null);
@@ -404,6 +406,8 @@ export default function Inbox() {
     setNoteMode(false);
     setShowTemplates(false);
     setShowAssign(false);
+    setMobilePanel('chat');
+    setShowContactMobile(false);
     await loadMessages(conv.id);
   }
 
@@ -573,10 +577,13 @@ export default function Inbox() {
     : 'Escribe un mensaje o / para plantillas...';
 
   return (
-    <div className="flex h-full bg-slate-50">
+    <div className="flex h-full bg-slate-50 relative overflow-hidden">
 
       {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
-      <div className="w-80 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
+      <div className={`
+        ${mobilePanel === 'list' ? 'flex' : 'hidden'} md:flex
+        w-full md:w-72 lg:w-80 flex-shrink-0 bg-white border-r border-slate-200 flex-col
+      `}>
 
         <div className="px-4 py-4 border-b border-slate-100">
           <div className="flex items-center justify-between mb-3">
@@ -848,7 +855,10 @@ export default function Inbox() {
       </div>
 
       {/* ── Panel de chat ───────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`
+        ${mobilePanel === 'chat' ? 'flex' : 'hidden'} md:flex
+        flex-1 flex-col min-w-0
+      `}>
         {!selected ? (
           <div className="flex-1 flex items-center justify-center text-slate-400">
             <div className="text-center">
@@ -866,6 +876,13 @@ export default function Inbox() {
 
               {/* Fila 1: avatar + info del contacto */}
               <div className="px-4 pt-3 pb-2 flex items-center gap-3">
+                {/* Botón volver — solo móvil */}
+                <button
+                  onClick={() => setMobilePanel('list')}
+                  className="md:hidden p-1.5 -ml-1 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0"
+                >
+                  <ArrowLeft size={18} />
+                </button>
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-sm ${
                   selected.status === 'bot'    ? 'bg-gradient-to-br from-brand-400 to-brand-600'
                   : selected.status === 'human' ? 'bg-gradient-to-br from-amber-400 to-amber-600'
@@ -911,6 +928,15 @@ export default function Inbox() {
 
               {/* Fila 3: barra de acciones */}
               <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/60 flex items-center gap-1.5 overflow-x-auto">
+                {/* Botón de info/contacto — solo móvil y tablet */}
+                <button
+                  onClick={() => setShowContactMobile(v => !v)}
+                  className="xl:hidden h-7 w-7 flex items-center justify-center text-slate-400 hover:text-brand-500 hover:bg-brand-50 border border-slate-200 bg-white rounded-lg transition-colors flex-shrink-0"
+                  title="Info del contacto"
+                >
+                  <Info size={12} />
+                </button>
+                <div className="xl:hidden w-px h-4 bg-slate-200 flex-shrink-0" />
 
                 {/* Recordatorio */}
                 <div className="relative flex-shrink-0" ref={reminderRef}>
@@ -1285,18 +1311,43 @@ export default function Inbox() {
         </div>
       )}
 
-      {/* ── Panel de contacto ────────────────────────────────────────────────── */}
+      {/* ── Panel de contacto desktop (xl+) ─────────────────────────────────── */}
       {selected && (
-        <ContactPanel
-          conversation={selected}
-          companyId={companyId}
-          onContactUpdated={(contact) => {
-            setSelected(prev => ({ ...prev, contact_name: contact.name }));
-            setConversations(prev => prev.map(c =>
-              c.id === selected.id ? { ...c, contact_name: contact.name } : c
-            ));
-          }}
-        />
+        <div className="hidden xl:flex">
+          <ContactPanel
+            conversation={selected}
+            companyId={companyId}
+            onContactUpdated={(contact) => {
+              setSelected(prev => ({ ...prev, contact_name: contact.name }));
+              setConversations(prev => prev.map(c =>
+                c.id === selected.id ? { ...c, contact_name: contact.name } : c
+              ));
+            }}
+          />
+        </div>
+      )}
+
+      {/* ── Panel de contacto móvil/tablet (slide-over) ──────────────────────── */}
+      {selected && showContactMobile && (
+        <>
+          <div
+            className="xl:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowContactMobile(false)}
+          />
+          <div className="xl:hidden fixed inset-y-0 right-0 z-50 w-80 max-w-[90vw] shadow-2xl flex">
+            <ContactPanel
+              conversation={selected}
+              companyId={companyId}
+              onContactUpdated={(contact) => {
+                setSelected(prev => ({ ...prev, contact_name: contact.name }));
+                setConversations(prev => prev.map(c =>
+                  c.id === selected.id ? { ...c, contact_name: contact.name } : c
+                ));
+                setShowContactMobile(false);
+              }}
+            />
+          </div>
+        </>
       )}
     </div>
   );
