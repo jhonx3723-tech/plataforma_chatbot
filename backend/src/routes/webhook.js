@@ -190,6 +190,9 @@ router.post('/whatsapp/:companyId', async (req, res) => {
     const currentNode = nodes.find(n => n.id === session.current_node_id);
     if (!currentNode) return;
 
+    // If session is at a delay node, ignore user messages until the timer fires
+    if (currentNode.type === 'delay') return;
+
     let nextNodeId = null;
 
     if (currentNode.type === 'options') {
@@ -230,6 +233,22 @@ router.post('/whatsapp/:companyId', async (req, res) => {
     if (!nextNodeId) return;
     const nextNode = nodes.find(n => n.id === nextNodeId);
     if (!nextNode) return;
+
+    // Delay node: schedule and pause flow
+    if (nextNode.type === 'delay') {
+      const afterEdge = edges.find(e => e.source === nextNode.id && !e.sourceHandle);
+      if (afterEdge?.target) {
+        await supabase.from('delayed_messages').insert({
+          company_id:      company.id,
+          conversation_id: conv.id,
+          session_id:      session.id,
+          next_node_id:    afterEdge.target,
+          scheduled_at:    new Date(Date.now() + getDelayMs(nextNode)).toISOString(),
+        });
+      }
+      await updateSession(session.id, nextNode.id);
+      return;
+    }
 
     const sent = await dispatchNode(company, nextNode, edges, nodes, userPhone, vars);
     if (sent) await saveMessage(conv.id, company.id, 'outbound', sent, 'bot');
@@ -327,6 +346,13 @@ function isInBusinessHours(company) {
   const dayConfig = bh.schedule?.[day];
   if (!dayConfig?.open) return false;
   return nowTime >= dayConfig.from && nowTime < dayConfig.to;
+}
+
+function getDelayMs(node) {
+  const duration = parseInt(node.data?.duration) || 5;
+  const unit     = node.data?.unit || 'minutes';
+  const mult     = unit === 'seconds' ? 1000 : unit === 'hours' ? 3600000 : 60000;
+  return duration * mult;
 }
 
 function evaluateCondition(node, vars) {

@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, MessageSquareMore, LogOut, Users, Inbox,
-  KeyRound, BarChart2, ShieldCheck, Menu, X, UserRound,
+  KeyRound, BarChart2, ShieldCheck, Menu, X, UserRound, ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ChangePasswordModal from './ui/ChangePasswordModal';
+import { availabilityAPI } from '../lib/api';
 
 const ROLE_BADGE = {
   super_admin:   { label: 'Super Admin',   cls: 'bg-brand-500/20 text-brand-300 border-brand-500/30'      },
@@ -18,6 +19,39 @@ export default function Layout() {
   const navigate = useNavigate();
   const [showChangePwd, setShowChangePwd] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [statuses, setStatuses]           = useState([]);
+  const [myStatus, setMyStatus]           = useState(null); // { name, color }
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const statusRef = useRef(null);
+
+  // Load company statuses on mount (only for non-super_admin)
+  useEffect(() => {
+    if (isSuperAdmin || !user?.company_id) return;
+    availabilityAPI.getStatuses(user.company_id)
+      .then(data => {
+        setStatuses(data);
+        // Restore from saved status name
+        if (user.availability_status) {
+          const found = data.find(s => s.name === user.availability_status);
+          if (found) setMyStatus({ name: found.name, color: found.color });
+        }
+      })
+      .catch(() => {});
+  }, [user?.company_id, isSuperAdmin]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function h(e) { if (statusRef.current && !statusRef.current.contains(e.target)) setShowStatusMenu(false); }
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  async function handleSetStatus(s) {
+    setShowStatusMenu(false);
+    const next = s ? { name: s.name, color: s.color } : null;
+    setMyStatus(next);
+    await availabilityAPI.setMine(s?.name || null).catch(() => {});
+  }
 
   function handleLogout() {
     logout();
@@ -96,8 +130,16 @@ export default function Layout() {
       {/* Perfil + acciones */}
       <div className="p-4 border-t border-slate-800 space-y-2">
         <div className="flex items-center gap-3 px-1 mb-1">
-          <div className="w-8 h-8 rounded-full bg-brand-500/20 border border-brand-500/30 text-brand-400 flex items-center justify-center font-bold text-sm flex-shrink-0">
-            {user?.username?.[0]?.toUpperCase()}
+          <div className="relative w-8 h-8 flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-brand-500/20 border border-brand-500/30 text-brand-400 flex items-center justify-center font-bold text-sm">
+              {user?.username?.[0]?.toUpperCase()}
+            </div>
+            {myStatus && (
+              <span
+                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-900"
+                style={{ backgroundColor: myStatus.color }}
+              />
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-slate-200 truncate">{user?.username}</p>
@@ -109,6 +151,48 @@ export default function Layout() {
             </span>
           </div>
         </div>
+
+        {/* Estado de disponibilidad */}
+        {!isSuperAdmin && statuses.length > 0 && (
+          <div className="relative" ref={statusRef}>
+            <button
+              onClick={() => setShowStatusMenu(v => !v)}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors"
+            >
+              <span
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: myStatus?.color || '#94a3b8' }}
+              />
+              <span className="flex-1 text-left text-slate-300 text-xs truncate">
+                {myStatus?.name || 'Sin estado'}
+              </span>
+              <ChevronDown size={12} className="text-slate-500 flex-shrink-0" />
+            </button>
+            {showStatusMenu && (
+              <div className="absolute bottom-full mb-1 left-0 right-0 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-1 z-50">
+                {statuses.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleSetStatus(s)}
+                    className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-slate-700 transition-colors text-left"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                    <span className="text-sm text-slate-200">{s.name}</span>
+                    {myStatus?.name === s.name && <span className="ml-auto text-brand-400 text-xs">✓</span>}
+                  </button>
+                ))}
+                <div className="border-t border-slate-700 my-1" />
+                <button
+                  onClick={() => handleSetStatus(null)}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-slate-700 transition-colors"
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-500 flex-shrink-0" />
+                  <span className="text-sm text-slate-400">Sin estado</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <button
           onClick={() => setShowChangePwd(true)}

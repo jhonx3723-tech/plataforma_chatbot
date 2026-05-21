@@ -75,4 +75,33 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   res.json({ success: true });
 });
 
+// ── Exportar contactos como CSV ───────────────────────────────────────────────
+router.get('/export', authMiddleware, async (req, res) => {
+  const companyId = req.query.company_id ||
+    (req.user.role !== 'super_admin' ? req.user.company_id : null);
+  if (!companyId) return res.status(400).json({ error: 'company_id requerido' });
+
+  const { data, error } = await supabase
+    .from('contacts')
+    .select('name, phone, company_name, notes, created_at')
+    .eq('company_id', companyId)
+    .order('name', { ascending: true, nullsFirst: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [
+    ['Nombre', 'Teléfono', 'Empresa cliente', 'Notas', 'Fecha creación'].map(escape).join(','),
+    ...(data || []).map(c => [
+      c.name, c.phone, c.company_name, c.notes,
+      c.created_at ? new Date(c.created_at).toLocaleDateString('es-CO') : '',
+    ].map(escape).join(',')),
+  ];
+
+  const today = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="contactos-${today}.csv"`);
+  res.send('﻿' + rows.join('\n')); // BOM para Excel
+});
+
 module.exports = router;

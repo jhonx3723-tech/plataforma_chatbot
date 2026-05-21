@@ -64,6 +64,19 @@ export const contactsAPI = {
   save:       (data)       => api.post('/contacts', data).then(r => r.data),
   update:     (id, data)   => api.put(`/contacts/${id}`, data).then(r => r.data),
   remove:     (id)         => api.delete(`/contacts/${id}`).then(r => r.data),
+  exportCSV:  (company_id) => {
+    const token = localStorage.getItem('token');
+    const qs = new URLSearchParams({ ...(company_id ? { company_id } : {}), token }).toString();
+    window.open(`${API_BASE}/contacts/export?${qs}`, '_blank');
+  },
+};
+
+export const availabilityAPI = {
+  getStatuses:   (company_id) => api.get('/users/availability-statuses', { params: { company_id } }).then(r => r.data),
+  createStatus:  (data)       => api.post('/users/availability-statuses', data).then(r => r.data),
+  updateStatus:  (id, data)   => api.put(`/users/availability-statuses/${id}`, data).then(r => r.data),
+  deleteStatus:  (id)         => api.delete(`/users/availability-statuses/${id}`).then(r => r.data),
+  setMine:       (status)     => api.put('/users/me/availability', { status }).then(r => r.data),
 };
 
 export const templatesAPI = {

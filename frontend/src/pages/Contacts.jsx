@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   UserRound, Search, Building2, FileText, Phone,
-  Pencil, Trash2, Save, RefreshCw, X,
+  Pencil, Trash2, Save, RefreshCw, X, Download,
 } from 'lucide-react';
 import { contactsAPI } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -80,6 +80,13 @@ export default function Contacts() {
           <h1 className="text-xl font-bold text-slate-800">Contactos</h1>
           <p className="text-sm text-slate-400 mt-0.5">Gestiona los contactos de tu empresa</p>
         </div>
+        <button
+          onClick={() => contactsAPI.exportCSV(companyId)}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-colors"
+        >
+          <Download size={14} />
+          Exportar CSV
+        </button>
       </div>
 
       {/* Search bar + count + refresh */}

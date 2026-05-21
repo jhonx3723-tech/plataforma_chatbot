@@ -35,7 +35,7 @@ router.get('/my-agents', authMiddleware, requireCompanyAdmin, async (req, res) =
 
   const { data: users, error } = await supabase
     .from('users')
-    .select('id, username, email, active, role, created_at')
+    .select('id, username, email, active, role, availability_status, created_at')
     .eq('company_id', companyId)
     .eq('role', 'company_agent')
     .order('created_at');
@@ -172,6 +172,71 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 
   const { error } = await supabase.from('users').delete().eq('id', req.params.id);
   if (error) return res.status(404).json({ error: 'Usuario no encontrado' });
+  res.json({ success: true });
+});
+
+// ── Disponibilidad del agente (cualquier rol) ─────────────────────────────────
+router.put('/me/availability', authMiddleware, async (req, res) => {
+  const { status } = req.body; // null = desconectado
+  await supabase.from('users')
+    .update({ availability_status: status || null })
+    .eq('id', req.user.id);
+  res.json({ ok: true, availability_status: status || null });
+});
+
+// ── CRUD de estados de disponibilidad (company_admin) ─────────────────────────
+const DEFAULT_STATUSES = [
+  { id: '__online', name: 'En línea', color: '#22c55e', sort_order: 0 },
+  { id: '__busy',   name: 'Ocupado',  color: '#f59e0b', sort_order: 1 },
+  { id: '__away',   name: 'Ausente',  color: '#ef4444', sort_order: 2 },
+];
+
+router.get('/availability-statuses', authMiddleware, async (req, res) => {
+  const companyId = req.query.company_id || req.user.company_id;
+  if (!companyId) return res.status(400).json({ error: 'company_id requerido' });
+
+  const { data, error } = await supabase
+    .from('availability_statuses')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('sort_order');
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data?.length ? data : DEFAULT_STATUSES);
+});
+
+router.post('/availability-statuses', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  const { name, color, sort_order } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Nombre requerido' });
+
+  const { data, error } = await supabase
+    .from('availability_statuses')
+    .insert({ company_id: req.user.company_id, name: name.trim(), color: color || '#22c55e', sort_order: sort_order || 0 })
+    .select().single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
+});
+
+router.put('/availability-statuses/:id', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  const { name, color, sort_order } = req.body;
+
+  const { data, error } = await supabase
+    .from('availability_statuses')
+    .update({ name: name?.trim(), color, sort_order })
+    .eq('id', req.params.id)
+    .eq('company_id', req.user.company_id)
+    .select().single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+router.delete('/availability-statuses/:id', authMiddleware, requireCompanyAdmin, async (req, res) => {
+  await supabase.from('availability_statuses')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('company_id', req.user.company_id);
   res.json({ success: true });
 });
 

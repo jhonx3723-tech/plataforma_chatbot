@@ -8,7 +8,7 @@ import {
   UserRound, Search, Building2, FileText, Phone,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI, flowsAPI, labelsAdminAPI, followUpAPI, templatesAPI, contactsAPI } from '../lib/api';
+import { adminAPI, flowsAPI, labelsAdminAPI, followUpAPI, templatesAPI, contactsAPI, availabilityAPI } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
 import ConfirmModal from '../components/ui/ConfirmModal';
 
@@ -71,6 +71,13 @@ export default function AdminPanel() {
   const [contactForm, setContactForm]         = useState({ name: '', company_name: '', notes: '' });
   const [savingContact, setSavingContact]     = useState(false);
   const [confirmDeleteContact, setConfirmDeleteContact] = useState(null);
+
+  // Estados de disponibilidad
+  const [avStatuses, setAvStatuses]     = useState([]);
+  const [avForm, setAvForm]             = useState({ name: '', color: '#22c55e' });
+  const [savingAvStatus, setSavingAvStatus] = useState(false);
+  const [confirmDeleteAvStatus, setConfirmDeleteAvStatus] = useState(null);
+  const AV_PRESET_COLORS = ['#22c55e','#f59e0b','#ef4444','#3b82f6','#8b5cf6','#ec4899','#64748b','#0ea5e9'];
 
   // Follow-up
   const [fuConfig, setFuConfig]     = useState({ enabled: false, hours: 2, action: 'note', message: '' });
@@ -155,8 +162,13 @@ export default function AdminPanel() {
     finally { setLoadingFu(false); }
   }, []);
 
+  const loadAvStatuses = useCallback(async () => {
+    try { setAvStatuses(await availabilityAPI.getStatuses(companyId)); }
+    catch { /* silent */ }
+  }, [companyId]);
+
   useEffect(() => { loadStats(); }, [loadStats]);
-  useEffect(() => { if (tab === 'agents')   loadAgents();   }, [tab, loadAgents]);
+  useEffect(() => { if (tab === 'agents') { loadAgents(); loadAvStatuses(); } }, [tab, loadAgents, loadAvStatuses]);
   useEffect(() => { if (tab === 'contacts') loadContacts(); }, [tab, loadContacts]);
   useEffect(() => { if (tab === 'flows')    loadFlows();    }, [tab, loadFlows]);
   useEffect(() => { if (tab === 'labels')   loadLabels();   }, [tab, loadLabels]);
@@ -447,8 +459,18 @@ export default function AdminPanel() {
                         {agent.username[0].toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold text-slate-900">{agent.username}</p>
+                          {agent.availability_status && (() => {
+                            const st = avStatuses.find(s => s.name === agent.availability_status);
+                            return st ? (
+                              <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border"
+                                style={{ backgroundColor: st.color + '20', color: st.color, borderColor: st.color + '40' }}>
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: st.color }} />
+                                {st.name}
+                              </span>
+                            ) : null;
+                          })()}
                           {!agent.active && (
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-500 border border-red-200">
                               Desactivado
@@ -489,6 +511,97 @@ export default function AdminPanel() {
               })}
             </div>
           )}
+
+          {/* ── Estados de disponibilidad ── */}
+          <div className="card p-5 space-y-4 mt-2">
+            <h3 className="font-semibold text-slate-800 flex items-center gap-2 text-sm">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+              Estados de disponibilidad
+            </h3>
+            <p className="text-xs text-slate-400 -mt-2">
+              Los agentes seleccionan su estado desde el menú lateral. Puedes crear estados personalizados.
+            </p>
+
+            {/* Lista de estados */}
+            <div className="space-y-2">
+              {avStatuses.map(s => (
+                <div key={s.id} className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-xl">
+                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                  <span className="text-sm font-medium text-slate-700 flex-1">{s.name}</span>
+                  {!s.id.startsWith('__') && (
+                    <button
+                      onClick={async () => {
+                        await availabilityAPI.deleteStatus(s.id).catch(() => {});
+                        setAvStatuses(prev => prev.filter(x => x.id !== s.id));
+                      }}
+                      className="p-1 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                  {s.id.startsWith('__') && (
+                    <span className="text-[10px] text-slate-300 font-medium">predeterminado</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Formulario agregar estado */}
+            <form
+              className="flex items-end gap-2 pt-1 border-t border-slate-100"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!avForm.name.trim()) return;
+                setSavingAvStatus(true);
+                try {
+                  const created = await availabilityAPI.createStatus({
+                    name: avForm.name.trim(),
+                    color: avForm.color,
+                    sort_order: avStatuses.filter(s => !s.id.startsWith('__')).length,
+                  });
+                  setAvStatuses(prev => {
+                    const withoutDefaults = prev.filter(s => !s.id.startsWith('__'));
+                    return [...withoutDefaults, created];
+                  });
+                  setAvForm({ name: '', color: '#22c55e' });
+                } catch { /* silent */ }
+                finally { setSavingAvStatus(false); }
+              }}
+            >
+              <div className="flex-1 space-y-1">
+                <label className="text-xs font-semibold text-slate-500">Nuevo estado</label>
+                <input
+                  type="text"
+                  className="input text-sm w-full"
+                  placeholder="Ej: En reunión"
+                  value={avForm.name}
+                  onChange={e => setAvForm(f => ({ ...f, name: e.target.value }))}
+                  maxLength={30}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500">Color</label>
+                <div className="flex gap-1 flex-wrap w-36">
+                  {AV_PRESET_COLORS.map(c => (
+                    <button
+                      key={c} type="button"
+                      onClick={() => setAvForm(f => ({ ...f, color: c }))}
+                      className={`w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 ${avForm.color === c ? 'border-slate-600 scale-110' : 'border-transparent'}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={savingAvStatus || !avForm.name.trim()}
+                className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-40 flex-shrink-0"
+              >
+                <Plus size={13} />
+                Agregar
+              </button>
+            </form>
+          </div>
         </div>
       )}
 

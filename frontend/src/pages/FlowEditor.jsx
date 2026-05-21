@@ -11,7 +11,7 @@ import {
   Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Save, ArrowLeft, Plus, MessageSquare, ListChecks, PhoneForwarded, CircleOff, PlayCircle, Keyboard, GitFork } from 'lucide-react';
+import { Save, ArrowLeft, Plus, MessageSquare, ListChecks, PhoneForwarded, CircleOff, PlayCircle, Keyboard, GitFork, Timer } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { flowsAPI } from '../lib/api';
 import { useToast } from '../components/ui/Toast';
@@ -22,6 +22,7 @@ import TransferNode from '../components/nodes/TransferNode';
 import EndNode from '../components/nodes/EndNode';
 import InputNode from '../components/nodes/InputNode';
 import ConditionNode from '../components/nodes/ConditionNode';
+import DelayNode from '../components/nodes/DelayNode';
 
 const nodeTypes = {
   start:     StartNode,
@@ -29,6 +30,7 @@ const nodeTypes = {
   options:   OptionsNode,
   input:     InputNode,
   condition: ConditionNode,
+  delay:     DelayNode,
   transfer:  TransferNode,
   end:       EndNode,
 };
@@ -66,6 +68,13 @@ const NODE_TEMPLATES = [
     label: 'Capturar',
     color: 'text-teal-600 bg-teal-50 hover:bg-teal-100',
     defaultData: { label: 'Capturar respuesta', question: '¿Cuál es tu respuesta?', variable_name: 'respuesta' },
+  },
+  {
+    type: 'delay',
+    icon: Timer,
+    label: 'Espera',
+    color: 'text-amber-600 bg-amber-50 hover:bg-amber-100',
+    defaultData: { label: 'Espera', duration: 5, unit: 'minutes', message: '' },
   },
   {
     type: 'condition',
@@ -233,7 +242,7 @@ export default function FlowEditor() {
           <Controls />
           <MiniMap
             nodeColor={n => {
-              const colors = { start: '#22c55e', message: '#3b82f6', options: '#f59e0b', input: '#14b8a6', condition: '#6366f1', transfer: '#a855f7', end: '#ef4444' };
+              const colors = { start: '#22c55e', message: '#3b82f6', options: '#f59e0b', input: '#14b8a6', delay: '#f59e0b', condition: '#6366f1', transfer: '#a855f7', end: '#ef4444' };
               return colors[n.type] || '#94a3b8';
             }}
             maskColor="rgba(255,255,255,0.8)"
@@ -262,6 +271,7 @@ export default function FlowEditor() {
           { color: 'bg-blue-400',   label: 'Mensaje' },
           { color: 'bg-amber-400',  label: 'Opciones' },
           { color: 'bg-teal-400',   label: 'Capturar' },
+          { color: 'bg-amber-400',  label: 'Espera' },
           { color: 'bg-indigo-400', label: 'Condición' },
           { color: 'bg-purple-400', label: 'Transferir' },
           { color: 'bg-red-400',    label: 'Fin' },

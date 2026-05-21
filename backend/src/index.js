@@ -19,6 +19,7 @@ const reportsRouter       = require('./routes/reports');
 
 const { sendText } = require('./services/whatsapp');
 const supabase     = require('./supabase');
+const { runDelayedMessages } = require('./delayedRunner');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -119,7 +120,9 @@ async function runFollowUps() {
 initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`✓ Servidor en http://localhost:${PORT}`);
-    setInterval(runFollowUps, 15 * 60 * 1000); // cada 15 minutos
-    runFollowUps(); // primera ejecución al arrancar
+    setInterval(runFollowUps, 15 * 60 * 1000);
+    runFollowUps();
+    setInterval(runDelayedMessages, 30 * 1000); // cada 30 segundos
+    runDelayedMessages();
   });
 });
