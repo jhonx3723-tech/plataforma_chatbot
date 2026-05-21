@@ -9,6 +9,7 @@ import Inbox from './pages/Inbox';
 import Users from './pages/Users';
 import Reports from './pages/Reports';
 import AdminPanel from './pages/AdminPanel';
+import Contacts from './pages/Contacts';
 
 function ProtectedRoute({ children, adminOnly = false, companyAdminAllowed = false }) {
   const { user, loading, isSuperAdmin, isCompanyAdmin } = useAuth();
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="users"     element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
           <Route path="reports"   element={<ProtectedRoute adminOnly><Reports /></ProtectedRoute>} />
           <Route path="admin"     element={<ProtectedRoute companyAdminAllowed><AdminPanel /></ProtectedRoute>} />
+          <Route path="contacts"  element={<Contacts />} />
           <Route path="inbox"     element={<Inbox />} />
         </Route>
         <Route path="/flows/:flowId" element={<ProtectedRoute companyAdminAllowed><FlowEditor /></ProtectedRoute>} />

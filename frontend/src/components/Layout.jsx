@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, MessageSquareMore, LogOut, Users, Inbox,
-  KeyRound, BarChart2, ShieldCheck, Menu, X,
+  KeyRound, BarChart2, ShieldCheck, Menu, X, UserRound,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ChangePasswordModal from './ui/ChangePasswordModal';
@@ -33,6 +33,9 @@ export default function Layout() {
     ] : []),
     ...(isCompanyAdmin ? [
       { to: '/admin',     icon: ShieldCheck,     label: 'Panel Admin'        },
+    ] : []),
+    ...(!isSuperAdmin ? [
+      { to: '/contacts',  icon: UserRound,       label: 'Contactos'          },
     ] : []),
     { to: '/inbox', icon: Inbox, label: 'Bandeja de entrada' },
   ];
