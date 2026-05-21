@@ -43,6 +43,7 @@ export const conversationsAPI = {
   setReminder:         (id, data)    => api.post(`/conversations/${id}/reminder`, data).then(r => r.data),
   clearReminder:       (id)          => api.delete(`/conversations/${id}/reminder`).then(r => r.data),
   getPendingReminders: ()            => api.get('/conversations/reminders/pending').then(r => r.data),
+  sendTyping:  (id, isTyping) => api.post(`/conversations/${id}/typing`, { isTyping }).then(r => r.data),
   sendImage:  (id, file, caption = '') => {
     const form = new FormData();
     form.append('file', file);

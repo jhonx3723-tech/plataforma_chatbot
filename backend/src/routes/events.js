@@ -1,6 +1,7 @@
 const express = require('express');
 const supabase = require('../supabase');
 const { authMiddleware } = require('../middleware/auth');
+const broadcaster = require('../broadcaster');
 
 const router = express.Router();
 
@@ -16,6 +17,9 @@ router.get('/', authMiddleware, (req, res) => {
   };
 
   send('connected', { ok: true });
+
+  const clientId = `${req.user.id}-${Date.now()}`;
+  broadcaster.register(clientId, req.user.id, req.user.company_id, res);
 
   const channelName = `inbox-${req.user.id}-${Date.now()}`;
 
@@ -52,6 +56,7 @@ router.get('/', authMiddleware, (req, res) => {
 
   req.on('close', () => {
     clearInterval(keepAlive);
+    broadcaster.unregister(clientId);
     supabase.removeChannel(channel);
   });
 });

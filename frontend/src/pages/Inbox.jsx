@@ -196,7 +196,7 @@ export default function Inbox() {
   const [reminderToasts, setReminderToasts] = useState([]); // { id, conv }
   const [mobilePanel, setMobilePanel]     = useState('list'); // 'list' | 'chat'
   const [showContactMobile, setShowContactMobile] = useState(false);
-
+  const [typingIndicators, setTypingIndicators] = useState({}); // convId -> username
 
   const messagesEndRef    = useRef(null);
   const pollRef           = useRef(null);
@@ -207,6 +207,8 @@ export default function Inbox() {
   const labelFilterRef    = useRef(null);
   const agentFilterRef    = useRef(null);
   const reminderRef       = useRef(null);
+  const typingTimerRef    = useRef(null);
+  const typingClearTimers = useRef({}); // convId -> timeoutId for auto-clear
 
   selectedRef.current = selected;
 
@@ -386,6 +388,28 @@ export default function Inbox() {
       }
     });
 
+    es.addEventListener('typing', (e) => {
+      const { conversationId, username, isTyping } = JSON.parse(e.data);
+      // Clear any existing auto-clear timer for this conversation
+      clearTimeout(typingClearTimers.current[conversationId]);
+      setTypingIndicators(prev => {
+        if (!isTyping) {
+          const { [conversationId]: _, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [conversationId]: username };
+      });
+      if (isTyping) {
+        // Auto-clear after 4s in case the sender never sends isTyping:false
+        typingClearTimers.current[conversationId] = setTimeout(() => {
+          setTypingIndicators(prev => {
+            const { [conversationId]: _, ...rest } = prev;
+            return rest;
+          });
+        }, 4000);
+      }
+    });
+
     es.onerror = () => {
       setRealtimeStatus('polling');
       es.close();
@@ -415,6 +439,14 @@ export default function Inbox() {
     const val = e.target.value;
     if (sendError) setSendError(null);
     setReply(val);
+    // Send typing presence to other agents
+    if (!noteMode && selected) {
+      clearTimeout(typingTimerRef.current);
+      conversationsAPI.sendTyping(selected.id, true).catch(() => {});
+      typingTimerRef.current = setTimeout(() => {
+        conversationsAPI.sendTyping(selected.id, false).catch(() => {});
+      }, 3000);
+    }
     if (!noteMode && val.startsWith('/')) {
       setTemplateQuery(val.slice(1));
       setShowTemplates(true);
@@ -1088,6 +1120,19 @@ export default function Inbox() {
                     </div>
                   );
                 })
+              )}
+              {/* Typing indicator */}
+              {typingIndicators[selected?.id] && (
+                <div className="flex items-end gap-2 px-4 pb-2">
+                  <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-3.5 py-2 flex items-center gap-2 shadow-sm">
+                    <span className="flex gap-0.5 items-end">
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
+                    <span className="text-xs text-slate-400 italic">{typingIndicators[selected.id]} está escribiendo...</span>
+                  </div>
+                </div>
               )}
               <div ref={messagesEndRef} />
             </div>

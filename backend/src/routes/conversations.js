@@ -3,6 +3,7 @@ const multer  = require('multer');
 const supabase = require('../supabase');
 const { authMiddleware } = require('../middleware/auth');
 const { sendText, uploadMedia, sendImage } = require('../services/whatsapp');
+const broadcaster = require('../broadcaster');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -45,6 +46,23 @@ router.get('/reminders/pending', authMiddleware, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data || []);
+});
+
+// ── Indicador de escritura (typing presence) ─────────────────────────────────
+router.post('/:id/typing', authMiddleware, (req, res) => {
+  const { isTyping } = req.body;
+  broadcaster.broadcast(
+    req.user.company_id,
+    'typing',
+    {
+      conversationId: req.params.id,
+      userId:         req.user.id,
+      username:       req.user.username,
+      isTyping:       !!isTyping,
+    },
+    req.user.id, // exclude sender
+  );
+  res.json({ ok: true });
 });
 
 // ── Listado de conversaciones ─────────────────────────────────────────────────

@@ -166,8 +166,9 @@ router.post('/whatsapp/:companyId', async (req, res) => {
       const sent = await dispatchNode(company, startNode, edges, nodes, userPhone, vars);
       if (sent) await saveMessage(conv.id, company.id, 'outbound', sent, 'bot');
 
-      const nextEdge = edges.find(e => e.source === startNode.id && !e.sourceHandle);
-      const nextNode = nextEdge ? nodes.find(n => n.id === nextEdge.target) : null;
+      const startEdge = edges.find(e => e.source === startNode.id && !e.sourceHandle);
+      const resolvedStartId = resolveConditionChain(startEdge?.target, nodes, edges, vars);
+      const nextNode = resolvedStartId ? nodes.find(n => n.id === resolvedStartId) : null;
       if (nextNode?.type === 'options' || nextNode?.type === 'input') {
         const sentNext = await dispatchNode(company, nextNode, edges, nodes, userPhone, vars);
         if (sentNext) await saveMessage(conv.id, company.id, 'outbound', sentNext, 'bot');
@@ -224,6 +225,9 @@ router.post('/whatsapp/:companyId', async (req, res) => {
     }
 
     if (!nextNodeId) return;
+    // Resolve any condition nodes before dispatching
+    nextNodeId = resolveConditionChain(nextNodeId, nodes, edges, vars);
+    if (!nextNodeId) return;
     const nextNode = nodes.find(n => n.id === nextNodeId);
     if (!nextNode) return;
 
@@ -232,7 +236,8 @@ router.post('/whatsapp/:companyId', async (req, res) => {
 
     if (nextNode.type === 'message') {
       const afterEdge = edges.find(e => e.source === nextNode.id && !e.sourceHandle);
-      const afterNode = afterEdge ? nodes.find(n => n.id === afterEdge.target) : null;
+      const resolvedAfterId = resolveConditionChain(afterEdge?.target, nodes, edges, vars);
+      const afterNode = resolvedAfterId ? nodes.find(n => n.id === resolvedAfterId) : null;
       if (afterNode?.type === 'options' || afterNode?.type === 'input') {
         const sentAfter = await dispatchNode(company, afterNode, edges, nodes, userPhone, vars);
         if (sentAfter) await saveMessage(conv.id, company.id, 'outbound', sentAfter, 'bot');
@@ -322,6 +327,39 @@ function isInBusinessHours(company) {
   const dayConfig = bh.schedule?.[day];
   if (!dayConfig?.open) return false;
   return nowTime >= dayConfig.from && nowTime < dayConfig.to;
+}
+
+function evaluateCondition(node, vars) {
+  const { variable, operator, value } = node.data || {};
+  const actual   = vars[variable] != null ? String(vars[variable]) : '';
+  const expected = String(value || '');
+  switch (operator) {
+    case 'equals':       return actual.toLowerCase() === expected.toLowerCase();
+    case 'not_equals':   return actual.toLowerCase() !== expected.toLowerCase();
+    case 'contains':     return actual.toLowerCase().includes(expected.toLowerCase());
+    case 'starts_with':  return actual.toLowerCase().startsWith(expected.toLowerCase());
+    case 'is_empty':     return actual.trim() === '';
+    case 'not_empty':    return actual.trim() !== '';
+    case 'greater_than': return parseFloat(actual) > parseFloat(expected);
+    case 'less_than':    return parseFloat(actual) < parseFloat(expected);
+    default:             return false;
+  }
+}
+
+// Follow a chain of condition nodes, returning the first non-condition node id.
+// Returns null if the chain leads nowhere or loops.
+function resolveConditionChain(nodeId, nodes, edges, vars) {
+  let id = nodeId;
+  for (let i = 0; i < 20; i++) {
+    if (!id) return null;
+    const node = nodes.find(n => n.id === id);
+    if (!node) return null;
+    if (node.type !== 'condition') return id;
+    const branch = evaluateCondition(node, vars) ? 'true' : 'false';
+    const edge   = edges.find(e => e.source === node.id && e.sourceHandle === branch);
+    id = edge?.target ?? null;
+  }
+  return null;
 }
 
 async function dispatchNode(company, node, edges, nodes, userPhone, vars = {}) {
