@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   Send, Bot, UserCheck, X, RefreshCw, Search, MessageSquare,
   RotateCcw, UserPlus, StickyNote, ChevronDown, Check, Paperclip, Tag, Filter,
-  Bell, BellOff, Zap, ArrowLeft, Info, LayoutTemplate,
+  Bell, BellOff, Zap, ArrowLeft, Info, LayoutTemplate, Clock,
 } from 'lucide-react';
 import ContactPanel from '../components/inbox/ContactPanel';
 import TemplatePopover from '../components/inbox/TemplatePopover';
