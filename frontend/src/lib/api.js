@@ -19,6 +19,7 @@ export const companiesAPI = {
   create:          data        => api.post('/companies', data).then(r => r.data),
   update:          (id, data)  => api.put(`/companies/${id}`, data).then(r => r.data),
   remove:          id          => api.delete(`/companies/${id}`).then(r => r.data),
+  toggleCRM:       id          => api.patch(`/companies/${id}/toggle-crm`).then(r => r.data),
   getWAProfile:    id          => api.get(`/companies/${id}/wa-profile`).then(r => r.data),
   updateWAProfile: (id, data)  => api.put(`/companies/${id}/wa-profile`, data).then(r => r.data),
 };
@@ -59,16 +60,44 @@ export const dashboardAPI = {
 };
 
 export const contactsAPI = {
-  getAll:     (params)     => api.get('/contacts', { params }).then(r => r.data),
-  getByPhone: (phone, cid) => api.get(`/contacts/phone/${phone}`, { params: { company_id: cid } }).then(r => r.data),
-  save:       (data)       => api.post('/contacts', data).then(r => r.data),
-  update:     (id, data)   => api.put(`/contacts/${id}`, data).then(r => r.data),
-  remove:     (id)         => api.delete(`/contacts/${id}`).then(r => r.data),
+  getAll:      (params)     => api.get('/contacts', { params }).then(r => r.data),
+  getByPhone:  (phone, cid) => api.get(`/contacts/phone/${phone}`, { params: { company_id: cid } }).then(r => r.data),
+  save:        (data)       => api.post('/contacts', data).then(r => r.data),
+  update:      (id, data)   => api.put(`/contacts/${id}`, data).then(r => r.data),
+  remove:      (id)         => api.delete(`/contacts/${id}`).then(r => r.data),
+  getPipeline: (company_id) => api.get('/contacts/pipeline', { params: { company_id } }).then(r => r.data),
   exportCSV:  (company_id) => {
     const token = localStorage.getItem('token');
     const qs = new URLSearchParams({ ...(company_id ? { company_id } : {}), token }).toString();
     window.open(`${API_BASE}/contacts/export?${qs}`, '_blank');
   },
+};
+
+export const crmAPI = {
+  getStages:      (company_id) => api.get('/crm/stages', { params: { company_id } }).then(r => r.data),
+  createStage:    (data)       => api.post('/crm/stages', data).then(r => r.data),
+  updateStage:    (id, data)   => api.put(`/crm/stages/${id}`, data).then(r => r.data),
+  deleteStage:    (id)         => api.delete(`/crm/stages/${id}`).then(r => r.data),
+  resetStages:    (company_id) => api.delete('/crm/stages', { params: { company_id } }).then(r => r.data),
+  getPipeline:    (params)     => api.get('/crm/pipeline', { params }).then(r => r.data),
+  exportPipeline: (company_id) => {
+    const token = localStorage.getItem('token');
+    const qs = new URLSearchParams({ ...(company_id ? { company_id } : {}), token }).toString();
+    window.open(`${API_BASE}/crm/pipeline/export?${qs}`, '_blank');
+  },
+  // Actividades
+  getActivities:   (contactId)  => api.get('/crm/activities', { params: { contact_id: contactId } }).then(r => r.data),
+  getPendingTasks: ()           => api.get('/crm/activities/pending').then(r => r.data),
+  createActivity:  (data)       => api.post('/crm/activities', data).then(r => r.data),
+  updateActivity:  (id, data)   => api.put(`/crm/activities/${id}`, data).then(r => r.data),
+  deleteActivity:  (id)         => api.delete(`/crm/activities/${id}`).then(r => r.data),
+};
+
+export const hsmAPI = {
+  getTemplates: (company_id) => api.get('/hsm', { params: { company_id } }).then(r => r.data),
+  send: (conversationId, data) => api.post(`/hsm/send/${conversationId}`, data).then(r => r.data),
+  getWabaId: () => api.get('/hsm/waba-id').then(r => r.data),
+  saveWabaId: (waba_id) => api.put('/hsm/waba-id', { waba_id }).then(r => r.data),
 };
 
 export const availabilityAPI = {

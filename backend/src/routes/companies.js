@@ -102,6 +102,23 @@ router.delete('/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// ── Toggle CRM (solo super_admin) ─────────────────────────────────────────────
+router.patch('/:id/toggle-crm', requireSuperAdmin, async (req, res) => {
+  const { data: company } = await supabase
+    .from('companies').select('crm_enabled').eq('id', req.params.id).single();
+  if (!company) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+  const { data, error } = await supabase
+    .from('companies')
+    .update({ crm_enabled: !company.crm_enabled })
+    .eq('id', req.params.id)
+    .select('id, crm_enabled')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 // ── Follow-up config (company_admin gestiona su propia empresa) ───────────────
 router.get('/my/follow-up', authMiddleware, requireCompanyAdmin, async (req, res) => {
   const companyId = req.user.company_id;

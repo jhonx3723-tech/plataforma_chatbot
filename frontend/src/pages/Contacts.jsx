@@ -1,12 +1,232 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   UserRound, Search, Building2, FileText, Phone,
-  Pencil, Trash2, Save, RefreshCw, X, Download,
+  Pencil, Trash2, Save, RefreshCw, X, Download, Upload,
+  CheckCircle, AlertCircle, ChevronDown,
 } from 'lucide-react';
 import { contactsAPI } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
 import ConfirmModal from '../components/ui/ConfirmModal';
+
+// ── ImportModal ────────────────────────────────────────────────────────────────
+function ImportModal({ companyId, onClose, onImported }) {
+  const [step,     setStep]     = useState('upload'); // upload | mapping | importing | result
+  const [file,     setFile]     = useState(null);
+  const [columns,  setColumns]  = useState([]);
+  const [preview,  setPreview]  = useState([]);
+  const [mapping,  setMapping]  = useState({ phone: '', name: '', company_name: '', notes: '' });
+  const [result,   setResult]   = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const fileRef = useRef(null);
+  const toast = useToast();
+
+  function parseCsvPreview(text) {
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (!lines.length) return { cols: [], rows: [] };
+    const sep  = lines[0].includes(';') ? ';' : ',';
+    const cols = lines[0].split(sep).map(c => c.replace(/^"|"$/g, '').trim());
+    const rows = lines.slice(1, 6).map(l =>
+      l.split(sep).map(v => v.replace(/^"|"$/g, '').trim())
+    );
+    return { cols, rows };
+  }
+
+  function handleFile(f) {
+    if (!f) return;
+    setFile(f);
+    const reader = new FileReader();
+    reader.onload = e => {
+      const { cols, rows } = parseCsvPreview(e.target.result);
+      setColumns(cols);
+      setPreview(rows);
+      // Auto-detectar columnas
+      const auto = { phone: '', name: '', company_name: '', notes: '' };
+      cols.forEach(c => {
+        const cl = c.toLowerCase();
+        if (!auto.phone        && /tel[eé]?fono|phone|celular|m[oó]vil|cel|whatsapp/i.test(cl)) auto.phone = c;
+        if (!auto.name         && /^nombre$|^name$/i.test(cl)) auto.name = c;
+        if (!auto.company_name && /empresa|company/i.test(cl))  auto.company_name = c;
+        if (!auto.notes        && /notas|notes/i.test(cl))       auto.notes = c;
+      });
+      setMapping(auto);
+      setStep('mapping');
+    };
+    reader.readAsText(f, 'utf-8');
+  }
+
+  async function handleImport() {
+    if (!mapping.phone) { toast.error('Selecciona la columna de teléfono'); return; }
+    setStep('importing');
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('company_id', companyId || '');
+    formData.append('mapping', JSON.stringify(mapping));
+    const token = localStorage.getItem('token');
+    try {
+      const resp = await fetch('/api/contacts/import', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData,
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error);
+      setResult(data);
+      setStep('result');
+      onImported?.();
+    } catch (err) {
+      toast.error(err.message);
+      setStep('mapping');
+    }
+  }
+
+  const FIELD_LABELS = { phone: 'Teléfono *', name: 'Nombre', company_name: 'Empresa', notes: 'Notas' };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Upload size={16} className="text-brand-500" />
+            <h3 className="font-bold text-slate-800">Importar contactos</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5 overflow-y-auto flex-1">
+
+          {/* ── Step 1: Upload ── */}
+          {step === 'upload' && (
+            <div>
+              <p className="text-sm text-slate-500 mb-4">
+                Sube un archivo CSV o Excel exportado como CSV. Debe tener al menos una columna de teléfono.
+              </p>
+              <div
+                onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]); }}
+                onClick={() => fileRef.current?.click()}
+                className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-colors ${
+                  dragging ? 'border-brand-400 bg-brand-50' : 'border-slate-200 hover:border-brand-300 hover:bg-slate-50'
+                }`}
+              >
+                <Upload size={32} className={`mx-auto mb-3 ${dragging ? 'text-brand-500' : 'text-slate-300'}`} />
+                <p className="font-semibold text-slate-600 text-sm">Arrastra tu CSV aquí</p>
+                <p className="text-xs text-slate-400 mt-1">o haz clic para seleccionar</p>
+                <p className="text-[10px] text-slate-300 mt-3">CSV, máx. 10MB</p>
+              </div>
+              <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
+                onChange={e => handleFile(e.target.files[0])} />
+
+              <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <p className="text-xs font-semibold text-slate-500 mb-2">Formato recomendado de columnas:</p>
+                <code className="text-[11px] text-brand-600 font-mono">Teléfono, Nombre, Empresa, Notas</code>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2: Mapping ── */}
+          {step === 'mapping' && (
+            <div>
+              <p className="text-sm font-semibold text-slate-700 mb-1">{file?.name}</p>
+              <p className="text-xs text-slate-400 mb-4">{columns.length} columnas detectadas. Mapea cada campo:</p>
+
+              <div className="space-y-3 mb-5">
+                {Object.entries(FIELD_LABELS).map(([field, label]) => (
+                  <div key={field} className="flex items-center gap-3">
+                    <label className="text-xs font-semibold text-slate-600 w-28 flex-shrink-0">{label}</label>
+                    <select
+                      value={mapping[field]}
+                      onChange={e => setMapping(m => ({ ...m, [field]: e.target.value }))}
+                      className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
+                    >
+                      <option value="">— No importar —</option>
+                      {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              {/* Preview */}
+              {preview.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 mb-2">Vista previa (primeras 5 filas)</p>
+                  <div className="overflow-x-auto rounded-xl border border-slate-100">
+                    <table className="w-full text-[11px]">
+                      <thead className="bg-slate-50">
+                        <tr>{columns.map(c => <th key={c} className="px-2 py-1.5 text-left text-slate-500 font-semibold">{c}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {preview.map((row, i) => (
+                          <tr key={i} className="border-t border-slate-50">
+                            {row.map((v, j) => <td key={j} className="px-2 py-1.5 text-slate-600 max-w-[80px] truncate">{v}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Step 3: Importing ── */}
+          {step === 'importing' && (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <span className="w-10 h-10 border-2 border-slate-200 border-t-brand-500 rounded-full animate-spin" />
+              <p className="font-semibold text-slate-600">Importando contactos...</p>
+              <p className="text-xs text-slate-400">Esto puede tomar unos segundos</p>
+            </div>
+          )}
+
+          {/* ── Step 4: Result ── */}
+          {step === 'result' && result && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <CheckCircle size={24} className="text-emerald-500 flex-shrink-0" />
+                <div>
+                  <p className="font-bold text-emerald-700">{result.imported} contactos importados</p>
+                  <p className="text-xs text-emerald-600">de {result.total} filas en el archivo</p>
+                </div>
+              </div>
+              {result.skipped > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-xs font-semibold text-amber-700 flex items-center gap-1">
+                    <AlertCircle size={12} /> {result.skipped} fila{result.skipped !== 1 ? 's' : ''} omitida{result.skipped !== 1 ? 's' : ''} (teléfono inválido)
+                  </p>
+                  {result.errors?.slice(0, 3).map((e, i) => (
+                    <p key={i} className="text-[10px] text-amber-600 mt-1">Fila {e.row}: "{e.value}" — {e.reason}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end flex-shrink-0">
+          {step === 'upload' && (
+            <button onClick={onClose} className="btn-secondary">Cancelar</button>
+          )}
+          {step === 'mapping' && (
+            <>
+              <button onClick={() => setStep('upload')} className="btn-secondary">Volver</button>
+              <button onClick={handleImport} disabled={!mapping.phone}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                <Upload size={13} /> Importar contactos
+              </button>
+            </>
+          )}
+          {step === 'result' && (
+            <button onClick={onClose} className="btn-primary">Listo</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function avatarLetters(c) {
   return (c.name || c.phone || '?').slice(0, 2).toUpperCase();
@@ -24,6 +244,7 @@ export default function Contacts() {
   const [form, setForm]                     = useState({ name: '', company_name: '', notes: '' });
   const [saving, setSaving]                 = useState(false);
   const [confirmDelete, setConfirmDelete]   = useState(null);
+  const [showImport,    setShowImport]      = useState(false);
 
   const load = useCallback(async () => {
     if (!companyId) return;
@@ -80,13 +301,16 @@ export default function Contacts() {
           <h1 className="text-xl font-bold text-slate-800">Contactos</h1>
           <p className="text-sm text-slate-400 mt-0.5">Gestiona los contactos de tu empresa</p>
         </div>
-        <button
-          onClick={() => contactsAPI.exportCSV(companyId)}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-colors"
-        >
-          <Download size={14} />
-          Exportar CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowImport(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-brand-500 text-white hover:bg-brand-600 transition-colors shadow-sm">
+            <Upload size={14} /> Importar CSV
+          </button>
+          <button onClick={() => contactsAPI.exportCSV(companyId)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-colors">
+            <Download size={14} /> Exportar CSV
+          </button>
+        </div>
       </div>
 
       {/* Search bar + count + refresh */}
@@ -267,6 +491,14 @@ export default function Contacts() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showImport && (
+        <ImportModal
+          companyId={companyId}
+          onClose={() => setShowImport(false)}
+          onImported={() => { load(); setShowImport(false); }}
+        />
       )}
 
       {confirmDelete && (

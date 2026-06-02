@@ -4,11 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import {
   Send, Bot, UserCheck, X, RefreshCw, Search, MessageSquare,
   RotateCcw, UserPlus, StickyNote, ChevronDown, Check, Paperclip, Tag, Filter,
-  Bell, BellOff, Zap, ArrowLeft, Info,
+  Bell, BellOff, Zap, ArrowLeft, Info, LayoutTemplate,
 } from 'lucide-react';
 import ContactPanel from '../components/inbox/ContactPanel';
 import TemplatePopover from '../components/inbox/TemplatePopover';
 import LabelSelector from '../components/inbox/LabelSelector';
+import HSMTemplateModal from '../components/inbox/HSMTemplateModal';
 
 const STATUS_LABELS = { bot: 'Bot', human: 'Agente', closed: 'Cerrado' };
 const STATUS_COLORS = {
@@ -23,11 +24,12 @@ const STATUS_DOT = {
 };
 
 const FILTER_TABS = [
-  { key: 'all',    label: 'Todas'   },
-  { key: 'mine',   label: 'Mis'     },
-  { key: 'bot',    label: 'Bot'     },
-  { key: 'human',  label: 'Agente'  },
-  { key: 'closed', label: 'Cerradas'},
+  { key: 'all',        label: 'Todas'      },
+  { key: 'mine',       label: 'Mis'        },
+  { key: 'unassigned', label: 'Sin asignar'},
+  { key: 'bot',        label: 'Bot'        },
+  { key: 'human',      label: 'Agente'     },
+  { key: 'closed',     label: 'Cerradas'   },
 ];
 
 function formatTime(iso) {
@@ -38,6 +40,15 @@ function formatTime(iso) {
   if (diffDays === 0) return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
   if (diffDays === 1) return 'Ayer';
   return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+}
+
+function waitingTime(createdAt) {
+  if (!createdAt) return null;
+  const mins = Math.floor((Date.now() - new Date(createdAt)) / 60000);
+  if (mins < 60)  return { label: `${mins}m`, level: mins > 30 ? 'warn' : 'ok' };
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return { label: `${hrs}h ${mins % 60}m`, level: hrs >= 1 ? 'danger' : 'warn' };
+  return { label: `${Math.floor(hrs / 24)}d`, level: 'danger' };
 }
 
 function avatarInitials(name) {
@@ -197,6 +208,7 @@ export default function Inbox() {
   const [mobilePanel, setMobilePanel]     = useState('list'); // 'list' | 'chat'
   const [showContactMobile, setShowContactMobile] = useState(false);
   const [typingIndicators, setTypingIndicators] = useState({}); // convId -> username
+  const [showHSM, setShowHSM]             = useState(false);
 
   const messagesEndRef    = useRef(null);
   const pollRef           = useRef(null);
@@ -385,6 +397,16 @@ export default function Inbox() {
           ));
           showBrowserNotification(msg.conversation_id, 'Nuevo mensaje de cliente', msg.content);
         }
+      }
+    });
+
+    es.addEventListener('assignment', (e) => {
+      const { conversation_id, assigned_to, assigned_agent_name } = JSON.parse(e.data);
+      setConversations(prev => prev.map(c =>
+        c.id === conversation_id ? { ...c, assigned_to, assigned_agent_name } : c
+      ));
+      if (selectedRef.current?.id === conversation_id) {
+        setSelected(p => p ? { ...p, assigned_to, assigned_agent_name } : p);
       }
     });
 
@@ -588,8 +610,9 @@ export default function Inbox() {
   // mientras la búsqueda está pendiente (timer aún corriendo), usar lista local como fallback.
   const baseList = (search.trim() && searchResults !== null) ? searchResults : conversations;
   const filteredConvs = baseList.filter(c => {
-    if (filter === 'mine')   return c.assigned_to === user?.id;
-    if (filter !== 'all')    return c.status === filter;
+    if (filter === 'mine')       return c.assigned_to === user?.id;
+    if (filter === 'unassigned') return c.status === 'human' && !c.assigned_to;
+    if (filter !== 'all')        return c.status === filter;
     return true;
   }).filter(c => {
     if (!search.trim() || searchResults !== null) return true;
@@ -852,6 +875,20 @@ export default function Inbox() {
                         </div>
                       )}
 
+                      {/* SLA: tiempo sin respuesta del agente */}
+                      {conv.status === 'human' && !conv.first_response_at && (() => {
+                        const wt = waitingTime(conv.created_at);
+                        if (!wt) return null;
+                        return (
+                          <div className={`flex items-center gap-1 mt-1 text-[9px] font-semibold ${
+                            wt.level === 'danger' ? 'text-red-500' : wt.level === 'warn' ? 'text-amber-500' : 'text-slate-400'
+                          }`}>
+                            <Clock size={8} />
+                            Sin respuesta: {wt.label}
+                          </div>
+                        );
+                      })()}
+
                       {conv.label_ids?.length > 0 && labels.length > 0 && (
                         <div className="flex gap-1 mt-1 flex-wrap">
                           {conv.label_ids.slice(0, 3).map(lid => {
@@ -969,6 +1006,17 @@ export default function Inbox() {
                   <Info size={12} />
                 </button>
                 <div className="xl:hidden w-px h-4 bg-slate-200 flex-shrink-0" />
+
+                {/* Plantillas HSM */}
+                <button
+                  onClick={() => setShowHSM(true)}
+                  title="Enviar plantilla HSM de WhatsApp"
+                  className="h-7 flex items-center gap-1.5 px-2.5 text-xs text-green-700 border border-green-200 bg-white rounded-lg hover:bg-green-50 transition-colors font-semibold flex-shrink-0 whitespace-nowrap"
+                >
+                  <LayoutTemplate size={11} />
+                  HSM
+                </button>
+                <div className="w-px h-4 bg-slate-200 flex-shrink-0" />
 
                 {/* Recordatorio */}
                 <div className="relative flex-shrink-0" ref={reminderRef}>
@@ -1370,6 +1418,25 @@ export default function Inbox() {
             }}
           />
         </div>
+      )}
+
+      {/* ── Modal HSM ──────────────────────────────────────────────────────────── */}
+      {showHSM && selected && (
+        <HSMTemplateModal
+          conversationId={selected.id}
+          companyId={selected.company_id}
+          onClose={() => setShowHSM(false)}
+          onSent={(msg) => {
+            setMessages(prev => [...prev, msg]);
+            setSelected(prev => ({ ...prev, status: 'human' }));
+            setConversations(prev => prev.map(c =>
+              c.id === selected.id
+                ? { ...c, status: 'human', last_message: msg.content, last_message_at: msg.created_at }
+                : c
+            ));
+            setShowHSM(false);
+          }}
+        />
       )}
 
       {/* ── Panel de contacto móvil/tablet (slide-over) ──────────────────────── */}

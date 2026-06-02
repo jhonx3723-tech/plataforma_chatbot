@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BotBuilder — Design System</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    /* Brand — Indigo */
+    --brand-50:  #eef2ff;
+    --brand-100: #e0e7ff;
+    --brand-200: #c7d2fe;
+    --brand-300: #a5b4fc;
+    --brand-400: #818cf8;
+    --brand-500: #6366f1;
+    --brand-600: #4f46e5;
+    --brand-700: #4338ca;
+    --brand-800: #3730a3;
+    --brand-900: #312e81;
+
+    /* Slate */
+    --slate-50:  #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
+    --slate-600: #475569; --slate-700: #334155; --slate-800: #1e293b;
+    --slate-900: #0f172a;
+
+    /* Semantic */
+    --emerald-500: #10b981; --amber-500: #f59e0b; --red-500: #ef4444;
+    --violet-500: #8b5cf6;  --orange-500: #f97316; --sky-500: #0ea5e9;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #f8fafc;
+    color: #1e293b;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 900px; margin: 0 auto; padding: 48px 32px; }
+
+  /* ── Cover ── */
+  .cover {
+    background: linear-gradient(135deg, #312e81 0%, #4338ca 40%, #6366f1 70%, #818cf8 100%);
+    border-radius: 20px;
+    padding: 60px 48px;
+    margin-bottom: 48px;
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 70%);
+    top: -100px; right: -80px;
+    border-radius: 50%;
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(255,255,255,0.07) 0%, transparent 70%);
+    bottom: -80px; left: -60px;
+    border-radius: 50%;
+  }
+  .logo-box {
+    width: 56px; height: 56px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 28px;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.3);
+    font-size: 28px;
+    position: relative; z-index: 1;
+  }
+  .cover h1 { font-size: 42px; font-weight: 800; letter-spacing: -1px; position: relative; z-index: 1; }
+  .cover .sub { font-size: 14px; opacity: 0.7; margin-top: 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 2px; position: relative; z-index: 1; }
+  .cover .by  { font-size: 13px; opacity: 0.5; margin-top: 24px; position: relative; z-index: 1; }
+  .version-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 20px;
+    position: relative; z-index: 1;
+  }
+
+  /* ── Sections ── */
+  .section { margin-bottom: 48px; }
+  .section-title {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 2px;
+    color: var(--brand-500);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--brand-100);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .num {
+    width: 22px; height: 22px;
+    background: var(--brand-500);
+    color: white;
+    border-radius: 6px;
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  h2 { font-size: 22px; font-weight: 700; color: var(--slate-900); margin-bottom: 8px; }
+  h3 { font-size: 13px; font-weight: 600; color: var(--slate-600); margin-bottom: 14px; }
+  p  { color: var(--slate-500); margin-bottom: 12px; font-size: 13px; }
+
+  /* ── Color Palette ── */
+  .palette-group { margin-bottom: 28px; }
+  .palette-label { font-size: 12px; font-weight: 600; color: var(--slate-500); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+  .swatches { display: flex; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .swatch {
+    flex: 1;
+    height: 72px;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    padding: 8px 4px;
+    position: relative;
+  }
+  .swatch .sw-name  { font-size: 9px; font-weight: 700; opacity: 0.75; }
+  .swatch .sw-hex   { font-size: 9px; font-family: 'JetBrains Mono', monospace; opacity: 0.6; }
+  .swatch.light-text .sw-name, .swatch.light-text .sw-hex { color: #1e293b; }
+  .swatch.dark-text  .sw-name, .swatch.dark-text .sw-hex  { color: white; }
+
+  /* Semantic colors row */
+  .semantic-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .sem-card {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .sem-swatch { height: 48px; }
+  .sem-info { background: white; padding: 8px; }
+  .sem-info .sem-name { font-size: 10px; font-weight: 700; color: var(--slate-700); }
+  .sem-info .sem-hex  { font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--slate-400); }
+  .sem-info .sem-use  { font-size: 9px; color: var(--slate-400); margin-top: 2px; }
+
+  /* ── Typography ── */
+  .type-scale { display: flex; flex-direction: column; gap: 20px; }
+  .type-row { display: flex; align-items: baseline; gap: 20px; padding: 16px; background: white; border-radius: 10px; border: 1px solid var(--slate-100); }
+  .type-meta { width: 120px; flex-shrink: 0; }
+  .type-meta .tm-name { font-size: 11px; font-weight: 600; color: var(--brand-500); }
+  .type-meta .tm-spec { font-size: 10px; color: var(--slate-400); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+  .type-sample { color: var(--slate-800); }
+
+  /* ── Components ── */
+  .comp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .comp-card {
+    background: white;
+    border: 1px solid var(--slate-100);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .comp-card h3 { font-size: 11px; font-weight: 700; color: var(--slate-500); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .comp-preview { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  /* Buttons */
+  .btn-p {
+    background: #4f46e5; color: white; border: none;
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: default; font-family: 'Inter', sans-serif;
+    box-shadow: 0 1px 3px rgba(79,70,229,0.3);
+  }
+  .btn-s {
+    background: white; color: #475569;
+    border: 1px solid #e2e8f0;
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    cursor: default; font-family: 'Inter', sans-serif;
+  }
+  .btn-d {
+    background: #4f46e5; color: white; border: none;
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: default; font-family: 'Inter', sans-serif;
+    opacity: 0.5;
+  }
+  .btn-ghost {
+    background: #eef2ff; color: #4f46e5; border: none;
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: default; font-family: 'Inter', sans-serif;
+  }
+  .btn-danger {
+    background: #ef4444; color: white; border: none;
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: default; font-family: 'Inter', sans-serif;
+  }
+
+  /* Badges */
+  .badge-bot    { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge-human  { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge-closed { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge-ok     { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge-warn   { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+
+  /* Input */
+  .inp {
+    width: 100%; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; font-family: 'Inter', sans-serif;
+    color: #334155; background: white; outline: none;
+  }
+  .inp-focus {
+    width: 100%; border: 1px solid transparent; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; font-family: 'Inter', sans-serif;
+    color: #334155; background: white; outline: none;
+    box-shadow: 0 0 0 2px #818cf8;
+  }
+
+  /* Cards */
+  .card-ex {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  }
+
+  /* ── Spacing ── */
+  .spacing-grid { display: flex; gap: 0; align-items: flex-end; }
+  .sp-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 6px; }
+  .sp-bar  { background: var(--brand-200); border-radius: 4px; width: 32px; }
+  .sp-label { font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--slate-500); text-align: center; }
+  .sp-px    { font-size: 9px; color: var(--slate-400); text-align: center; }
+
+  /* ── Shadows ── */
+  .shadow-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .shadow-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  .shadow-demo { width: 64px; height: 64px; background: white; border-radius: 12px; }
+
+  /* ── Sidebar preview ── */
+  .sidebar-preview {
+    background: #0f172a;
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    height: 320px;
+  }
+  .sp-sidebar {
+    width: 200px;
+    flex-shrink: 0;
+    background: #0f172a;
+    border-right: 1px solid #1e293b;
+    display: flex; flex-direction: column;
+    padding: 20px 12px;
+    gap: 4px;
+  }
+  .sp-logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 8px 16px;
+    border-bottom: 1px solid #1e293b;
+    margin-bottom: 12px;
+  }
+  .sp-logo-icon {
+    width: 32px; height: 32px;
+    background: #4f46e5;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .sp-logo-text { font-size: 14px; font-weight: 700; color: white; }
+  .sp-logo-sub  { font-size: 9px; color: #475569; }
+  .sp-nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px;
+    font-size: 12px; color: #64748b; font-weight: 500;
+    border-left: 2px solid transparent;
+  }
+  .sp-nav-item.active {
+    background: rgba(99,102,241,0.12);
+    color: #a5b4fc;
+    border-left-color: #818cf8;
+  }
+  .sp-nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .sp-main {
+    flex: 1;
+    background: #f8fafc;
+    padding: 20px;
+  }
+  .sp-main-title { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 14px; }
+  .sp-stat-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .sp-stat {
+    background: white; border: 1px solid #e2e8f0;
+    border-radius: 10px; padding: 12px;
+  }
+  .sp-stat-num  { font-size: 20px; font-weight: 800; color: #4f46e5; }
+  .sp-stat-lbl  { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+  .sp-bar-wrap  { background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
+  .sp-bar-title { font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 8px; }
+  .sp-bar-track { height: 6px; background: #f1f5f9; border-radius: 999px; margin-bottom: 4px; }
+  .sp-bar-fill  { height: 6px; border-radius: 999px; background: linear-gradient(90deg, #6366f1, #818cf8); }
+
+  /* ── Icons grid ── */
+  .icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 12px; }
+  .icon-item {
+    background: white; border: 1px solid #f1f5f9;
+    border-radius: 10px; padding: 14px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .icon-sym  { font-size: 20px; }
+  .icon-name { font-size: 9px; color: #94a3b8; text-align: center; font-family: 'JetBrains Mono', monospace; }
+
+  /* ── Border radius ── */
+  .radius-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .radius-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .radius-box  { width: 56px; height: 56px; background: var(--brand-100); border: 2px solid var(--brand-300); }
+  .radius-lbl  { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--slate-500); }
+
+  /* ── Print ── */
+  @media print {
+    body { background: white; }
+    .page { padding: 24px; }
+    .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── COVER ── -->
+  <div class="cover">
+    <div class="logo-box">💬</div>
+    <div class="sub">Design System</div>
+    <h1>BotBuilder</h1>
+    <div class="by">by Cato Creativo — Plataforma SaaS Multi-tenant para WhatsApp</div>
+    <div class="version-badge">Versión 2.0 · Junio 2026</div>
+  </div>
+
+  <!-- ── 1. COLOR PALETTE ── -->
+  <div class="section">
+    <div class="section-title"><span class="num">1</span> Paleta de Colores</div>
+    <h2>Colores de Marca</h2>
+    <p>El color primario es <strong>Indigo 500 (#6366f1)</strong> — transmite tecnología, confianza y modernidad. Se usa en botones principales, íconos activos y acentos de UI.</p>
+
+    <div class="palette-group">
+      <div class="palette-label">Brand — Indigo (Color primario)</div>
+      <div class="swatches">
+        <div class="swatch light-text" style="background:#eef2ff"><div class="sw-name">50</div><div class="sw-hex">#eef2ff</div></div>
+        <div class="swatch light-text" style="background:#e0e7ff"><div class="sw-name">100</div><div class="sw-hex">#e0e7ff</div></div>
+        <div class="swatch light-text" style="background:#c7d2fe"><div class="sw-name">200</div><div class="sw-hex">#c7d2fe</div></div>
+        <div class="swatch light-text" style="background:#a5b4fc"><div class="sw-name">300</div><div class="sw-hex">#a5b4fc</div></div>
+        <div class="swatch light-text" style="background:#818cf8"><div class="sw-name">400</div><div class="sw-hex">#818cf8</div></div>
+        <div class="swatch dark-text"  style="background:#6366f1"><div class="sw-name">500 ★</div><div class="sw-hex">#6366f1</div></div>
+        <div class="swatch dark-text"  style="background:#4f46e5"><div class="sw-name">600</div><div class="sw-hex">#4f46e5</div></div>
+        <div class="swatch dark-text"  style="background:#4338ca"><div class="sw-name">700</div><div class="sw-hex">#4338ca</div></div>
+        <div class="swatch dark-text"  style="background:#3730a3"><div class="sw-name">800</div><div class="sw-hex">#3730a3</div></div>
+        <div class="swatch dark-text"  style="background:#312e81"><div class="sw-name">900</div><div class="sw-hex">#312e81</div></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="palette-label">Slate — Neutros (UI base, texto, bordes)</div>
+      <div class="swatches">
+        <div class="swatch light-text" style="background:#f8fafc"><div class="sw-name">50</div><div class="sw-hex">#f8fafc</div></div>
+        <div class="swatch light-text" style="background:#f1f5f9"><div class="sw-name">100</div><div class="sw-hex">#f1f5f9</div></div>
+        <div class="swatch light-text" style="background:#e2e8f0"><div class="sw-name">200</div><div class="sw-hex">#e2e8f0</div></div>
+        <div class="swatch light-text" style="background:#cbd5e1"><div class="sw-name">300</div><div class="sw-hex">#cbd5e1</div></div>
+        <div class="swatch light-text" style="background:#94a3b8"><div class="sw-name">400</div><div class="sw-hex">#94a3b8</div></div>
+        <div class="swatch dark-text"  style="background:#64748b"><div class="sw-name">500</div><div class="sw-hex">#64748b</div></div>
+        <div class="swatch dark-text"  style="background:#475569"><div class="sw-name">600</div><div class="sw-hex">#475569</div></div>
+        <div class="swatch dark-text"  style="background:#334155"><div class="sw-name">700</div><div class="sw-hex">#334155</div></div>
+        <div class="swatch dark-text"  style="background:#1e293b"><div class="sw-name">800</div><div class="sw-hex">#1e293b</div></div>
+        <div class="swatch dark-text"  style="background:#0f172a"><div class="sw-name">900</div><div class="sw-hex">#0f172a</div></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:28px">Colores Semánticos</h3>
+    <div class="semantic-grid">
+      <div class="sem-card">
+        <div class="sem-swatch" style="background:#10b981"></div>
+        <div class="sem-info"><div class="sem-name">Éxito</div><div class="sem-hex">#10b981</div><div class="sem-use">Ganados, confirmaciones</div></div>
+      </div>
+      <div class="sem-card">
+        <div class="sem-swatch" style="background:#f59e0b"></div>
+        <div class="sem-info"><div class="sem-name">Advertencia</div><div class="sem-hex">#f59e0b</div><div class="sem-use">Atención humana, recordatorios</div></div>
+      </div>
+      <div class="sem-card">
+        <div class="sem-swatch" style="background:#ef4444"></div>
+        <div class="sem-info"><div class="sem-name">Error / Peligro</div><div class="sem-hex">#ef4444</div><div class="sem-use">Vencidos, eliminar, perdidos</div></div>
+      </div>
+      <div class="sem-card">
+        <div class="sem-swatch" style="background:#8b5cf6"></div>
+        <div class="sem-info"><div class="sem-name">Agente</div><div class="sem-hex">#8b5cf6</div><div class="sem-use">Asignación, roles agente</div></div>
+      </div>
+      <div class="sem-card">
+        <div class="sem-swatch" style="background:#f97316"></div>
+        <div class="sem-info"><div class="sem-name">CRM Stage</div><div class="sem-hex">#f97316</div><div class="sem-use">Etapa Negociación</div></div>
+      </div>
+      <div class="sem-card">
+        <div class="sem-swatch" style="background:#25d366"></div>
+        <div class="sem-info"><div class="sem-name">WhatsApp</div><div class="sem-hex">#25d366</div><div class="sem-use">Actividad WhatsApp, online</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2. TYPOGRAPHY ── -->
+  <div class="section">
+    <div class="section-title"><span class="num">2</span> Tipografía</div>
+    <h2>Sistema de Fuentes</h2>
+    <p>Fuente principal: <strong>Inter</strong> (Google Fonts). Fuente monoespaciada: <strong>JetBrains Mono</strong> para teléfonos, hashes y código.</p>
+
+    <div class="type-scale">
+      <div class="type-row">
+        <div class="type-meta"><div class="tm-name">Display</div><div class="tm-spec">42px / 800 / -1px</div></div>
+        <div class="type-sample" style="font-size:42px;font-weight:800;letter-spacing:-1px;color:#0f172a">BotBuilder</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="tm-name">H1</div><div class="tm-spec">24px / 700 / -0.5px</div></div>
+        <div class="type-sample" style="font-size:24px;font-weight:700;letter-spacing:-0.5px">Pipeline CRM</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="tm-name">H2</div><div class="tm-spec">18px / 700</div></div>
+        <div class="type-sample" style="font-size:18px;font-weight:700">Conversaciones activas</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="tm-name">H3</div><div class="tm-spec">14px / 600</div></div>
+        <div class="type-sample" style="font-size:14px;font-weight:600">Agentes disponibles</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="tm-name">Body</div><div class="tm-spec">14px / 400</div></div>
+        <div class="type-sample" style="font-size:14px;color:#475569">Texto regular para descripciones y contenido principal de la interfaz.</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="tm-name">Small</div><div class="tm-spec">12px / 500</div></div>
+        <div class="type-sample" style="font-size:12px;font-weight:500;color:#64748b">Metadatos, timestamps, etiquetas secundarias</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="tm-name">Micro</div><div class="tm-spec">10px / 600 / +1px</div></div>
+        <div class="type-sample" style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#94a3b8">SECCIÓN · CATEGORÍA · LABEL</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="tm-name">Mono</div><div class="tm-spec">JetBrains Mono 12px</div></div>
+        <div class="type-sample" style="font-size:13px;font-family:'JetBrains Mono',monospace;color:#6366f1">573209498361 · #6366f1 · API_KEY</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 3. COMPONENTS ── -->
+  <div class="section">
+    <div class="section-title"><span class="num">3</span> Componentes</div>
+    <h2>Librería de Componentes</h2>
+
+    <div class="comp-grid">
+      <!-- Buttons -->
+      <div class="comp-card">
+        <h3>Botones</h3>
+        <div class="comp-preview">
+          <button class="btn-p">Guardar</button>
+          <button class="btn-s">Cancelar</button>
+          <button class="btn-ghost">Ver más</button>
+          <button class="btn-danger">Eliminar</button>
+          <button class="btn-d">Deshabilitado</button>
+        </div>
+      </div>
+
+      <!-- Badges -->
+      <div class="comp-card">
+        <h3>Badges / Estados</h3>
+        <div class="comp-preview">
+          <span class="badge-bot">Bot</span>
+          <span class="badge-human">Agente</span>
+          <span class="badge-closed">Cerrado</span>
+          <span class="badge-ok">Ganado</span>
+          <span class="badge-warn">Vencido</span>
+        </div>
+      </div>
+
+      <!-- Inputs -->
+      <div class="comp-card">
+        <h3>Inputs</h3>
+        <div class="comp-preview" style="flex-direction:column;width:100%">
+          <input class="inp" placeholder="Estado normal..." value="" readonly />
+          <input class="inp-focus" placeholder="Estado focus..." value="jhon marin" readonly style="margin-top:8px" />
+        </div>
+      </div>
+
+      <!-- Cards -->
+      <div class="comp-card">
+        <h3>Cards</h3>
+        <div class="card-ex">
+          <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:4px">Deal de Jhon García</div>
+          <div style="font-size:11px;color:#94a3b8">Empresa Cliente · 14 días en pipeline</div>
+          <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
+            <span style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:600">Propuesta</span>
+            <span style="font-size:12px;font-weight:700;color:#059669">$4.500.000</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 4. BORDER RADIUS ── -->
+  <div class="section">
+    <div class="section-title"><span class="num">4</span> Border Radius</div>
+    <h2>Bordes Redondeados</h2>
+    <div class="radius-row">
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:4px"></div>
+        <div class="radius-lbl">rounded</div>
+        <div class="radius-lbl" style="color:#cbd5e1">4px</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:8px"></div>
+        <div class="radius-lbl">rounded-lg</div>
+        <div class="radius-lbl" style="color:#cbd5e1">8px</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:10px"></div>
+        <div class="radius-lbl">rounded-xl ★</div>
+        <div class="radius-lbl" style="color:#cbd5e1">10–12px</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:16px"></div>
+        <div class="radius-lbl">rounded-2xl</div>
+        <div class="radius-lbl" style="color:#cbd5e1">16px</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:20px"></div>
+        <div class="radius-lbl">rounded-3xl</div>
+        <div class="radius-lbl" style="color:#cbd5e1">20px</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:999px;width:56px;height:56px"></div>
+        <div class="radius-lbl">rounded-full</div>
+        <div class="radius-lbl" style="color:#cbd5e1">avatares</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 5. SHADOWS ── -->
+  <div class="section">
+    <div class="section-title"><span class="num">5</span> Sombras</div>
+    <h2>Sistema de Sombras</h2>
+    <div class="shadow-grid">
+      <div class="shadow-card" style="box-shadow:0 1px 3px rgba(0,0,0,0.07)">
+        <div class="shadow-demo" style="box-shadow:0 1px 3px rgba(0,0,0,0.07)"></div>
+        <div style="text-align:center">
+          <div style="font-size:12px;font-weight:600;color:#334155">shadow-card</div>
+          <div style="font-size:10px;color:#94a3b8;font-family:'JetBrains Mono',monospace;margin-top:4px">0 1px 3px rgba(0,0,0,0.07)</div>
+          <div style="font-size:10px;color:#64748b;margin-top:4px">Cards, modales, dropdowns</div>
+        </div>
+      </div>
+      <div class="shadow-card" style="box-shadow:0 4px 12px rgba(0,0,0,0.10)">
+        <div class="shadow-demo" style="box-shadow:0 4px 12px rgba(0,0,0,0.10)"></div>
+        <div style="text-align:center">
+          <div style="font-size:12px;font-weight:600;color:#334155">shadow-card-hover</div>
+          <div style="font-size:10px;color:#94a3b8;font-family:'JetBrains Mono',monospace;margin-top:4px">0 4px 12px rgba(0,0,0,0.10)</div>
+          <div style="font-size:10px;color:#64748b;margin-top:4px">Cards en hover, paneles</div>
+        </div>
+      </div>
+      <div class="shadow-card" style="box-shadow:0 10px 30px rgba(79,70,229,0.25)">
+        <div class="shadow-demo" style="box-shadow:0 10px 30px rgba(79,70,229,0.25);background:linear-gradient(135deg,#6366f1,#4f46e5)"></div>
+        <div style="text-align:center">
+          <div style="font-size:12px;font-weight:600;color:#334155">shadow-brand</div>
+          <div style="font-size:10px;color:#94a3b8;font-family:'JetBrains Mono',monospace;margin-top:4px">0 10px 30px rgba(79,70,229,0.25)</div>
+          <div style="font-size:10px;color:#64748b;margin-top:4px">Logo box, botón primario</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. LAYOUT ── -->
+  <div class="section">
+    <div class="section-title"><span class="num">6</span> Layout de la Plataforma</div>
+    <h2>Estructura de UI</h2>
+    <p style="margin-bottom:20px">Layout principal: <strong>Sidebar fijo 240px</strong> + área de contenido fluida. En mobile: sidebar deslizable con overlay.</p>
+
+    <div class="sidebar-preview">
+      <div class="sp-sidebar">
+        <div class="sp-logo">
+          <div class="sp-logo-icon">💬</div>
+          <div>
+            <div class="sp-logo-text">BotBuilder</div>
+            <div class="sp-logo-sub">by Cato Creativo</div>
+          </div>
+        </div>
+        <div class="sp-nav-item">
+          <div class="sp-nav-dot"></div>Dashboard
+        </div>
+        <div class="sp-nav-item">
+          <div class="sp-nav-dot"></div>Empresas
+        </div>
+        <div class="sp-nav-item active">
+          <div class="sp-nav-dot"></div>Bandeja
+        </div>
+        <div class="sp-nav-item">
+          <div class="sp-nav-dot"></div>Contactos
+        </div>
+        <div class="sp-nav-item">
+          <div class="sp-nav-dot"></div>CRM Pipeline
+        </div>
+        <div style="flex:1"></div>
+        <div style="height:1px;background:#1e293b;margin-bottom:12px"></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px">
+          <div style="width:28px;height:28px;border-radius:50%;background:#312e81;border:1px solid #4338ca;display:flex;align-items:center;justify-content:center;font-size:11px;color:#a5b4fc;font-weight:700">JM</div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#e2e8f0">jhon marin</div>
+            <div style="font-size:9px;color:#475569">Administrador</div>
+          </div>
+        </div>
+      </div>
+      <div class="sp-main">
+        <div class="sp-main-title">Dashboard</div>
+        <div class="sp-stat-grid">
+          <div class="sp-stat">
+            <div class="sp-stat-num">24</div>
+            <div class="sp-stat-lbl">Conversaciones</div>
+          </div>
+          <div class="sp-stat">
+            <div class="sp-stat-num">8</div>
+            <div class="sp-stat-lbl">En atención</div>
+          </div>
+        </div>
+        <div class="sp-bar-wrap">
+          <div class="sp-bar-title">Distribución por estado</div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;margin-bottom:4px"><span>Bot</span><span>68%</span></div>
+          <div class="sp-bar-track"><div class="sp-bar-fill" style="width:68%"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;margin-top:6px;margin-bottom:4px"><span>Agente</span><span>25%</span></div>
+          <div class="sp-bar-track"><div class="sp-bar-fill" style="width:25%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;margin-top:6px;margin-bottom:4px"><span>Cerrado</span><span>7%</span></div>
+          <div class="sp-bar-track"><div class="sp-bar-fill" style="width:7%;background:linear-gradient(90deg,#94a3b8,#cbd5e1)"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 7. CRM STAGES ── -->
+  <div class="section">
+    <div class="section-title"><span class="num">7</span> Etapas CRM</div>
+    <h2>Pipeline — Colores de Etapas</h2>
+    <p>Cada empresa puede personalizar sus etapas. Colores predeterminados del sistema:</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+      <div style="text-align:center">
+        <div style="width:80px;height:40px;background:#64748b;border-radius:8px 8px 0 0"></div>
+        <div style="background:white;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px">
+          <div style="font-size:11px;font-weight:700;color:#64748b">Nuevo</div>
+          <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:#94a3b8">#64748b</div>
+        </div>
+      </div>
+      <div style="text-align:center">
+        <div style="width:80px;height:40px;background:#3b82f6;border-radius:8px 8px 0 0"></div>
+        <div style="background:white;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px">
+          <div style="font-size:11px;font-weight:700;color:#3b82f6">Contactado</div>
+          <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:#94a3b8">#3b82f6</div>
+        </div>
+      </div>
+      <div style="text-align:center">
+        <div style="width:80px;height:40px;background:#f59e0b;border-radius:8px 8px 0 0"></div>
+        <div style="background:white;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px">
+          <div style="font-size:11px;font-weight:700;color:#f59e0b">Propuesta</div>
+          <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:#94a3b8">#f59e0b</div>
+        </div>
+      </div>
+      <div style="text-align:center">
+        <div style="width:80px;height:40px;background:#f97316;border-radius:8px 8px 0 0"></div>
+        <div style="background:white;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px">
+          <div style="font-size:11px;font-weight:700;color:#f97316">Negociación</div>
+          <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:#94a3b8">#f97316</div>
+        </div>
+      </div>
+      <div style="text-align:center">
+        <div style="width:80px;height:40px;background:#10b981;border-radius:8px 8px 0 0"></div>
+        <div style="background:white;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px">
+          <div style="font-size:11px;font-weight:700;color:#10b981">Ganado ✓</div>
+          <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:#94a3b8">#10b981</div>
+        </div>
+      </div>
+      <div style="text-align:center">
+        <div style="width:80px;height:40px;background:#ef4444;border-radius:8px 8px 0 0"></div>
+        <div style="background:white;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:8px">
+          <div style="font-size:11px;font-weight:700;color:#ef4444">Perdido ✗</div>
+          <div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:#94a3b8">#ef4444</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 8. ROLES ── -->
+  <div class="section">
+    <div class="section-title"><span class="num">8</span> Roles y Permisos</div>
+    <h2>Jerarquía de Usuarios</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:4px">
+      <div style="background:#312e81;border-radius:12px;padding:20px;color:white">
+        <div style="font-size:18px;margin-bottom:8px">👑</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">Super Admin</div>
+        <div style="font-size:11px;opacity:0.6;margin-bottom:12px">Badge: Indigo</div>
+        <div style="font-size:10px;opacity:0.7;line-height:1.7">
+          • Gestionar empresas<br>• Gestionar todos los usuarios<br>• Ver reportes globales<br>• Acceso total al sistema
+        </div>
+      </div>
+      <div style="background:#065f46;border-radius:12px;padding:20px;color:white">
+        <div style="font-size:18px;margin-bottom:8px">🛡️</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">Company Admin</div>
+        <div style="font-size:11px;opacity:0.6;margin-bottom:12px">Badge: Emerald</div>
+        <div style="font-size:10px;opacity:0.7;line-height:1.7">
+          • Gestionar su empresa<br>• Crear/editar agentes<br>• Ver reportes de empresa<br>• Configurar flows y CRM
+        </div>
+      </div>
+      <div style="background:#3b0764;border-radius:12px;padding:20px;color:white">
+        <div style="font-size:18px;margin-bottom:8px">🎧</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">Company Agent</div>
+        <div style="font-size:11px;opacity:0.6;margin-bottom:12px">Badge: Violet</div>
+        <div style="font-size:10px;opacity:0.7;line-height:1.7">
+          • Atender conversaciones<br>• Ver sus contactos<br>• Ver pipeline asignado<br>• Cambiar disponibilidad
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 9. TECH STACK ── -->
+  <div class="section">
+    <div class="section-title"><span class="num">9</span> Stack Tecnológico</div>
+    <h2>Tecnologías</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px">
+        <div style="font-size:11px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">Frontend</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">React 18</span><span style="color:#94a3b8">UI Framework</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">Vite</span><span style="color:#94a3b8">Build tool</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">Tailwind CSS v3</span><span style="color:#94a3b8">Estilos utility-first</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">React Router v6</span><span style="color:#94a3b8">Enrutamiento SPA</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">Lucide React</span><span style="color:#94a3b8">Íconos SVG</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">React Flow</span><span style="color:#94a3b8">Flow builder visual</span></div>
+        </div>
+      </div>
+      <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px">
+        <div style="font-size:11px;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">Backend</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">Node.js + Express</span><span style="color:#94a3b8">API REST</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">Supabase</span><span style="color:#94a3b8">PostgreSQL + Realtime</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">JWT + bcrypt</span><span style="color:#94a3b8">Autenticación</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">SSE (EventSource)</span><span style="color:#94a3b8">Tiempo real</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">Web Push + VAPID</span><span style="color:#94a3b8">Push notifications</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600">Meta WhatsApp API</span><span style="color:#94a3b8">Mensajería</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div style="margin-top:48px;padding-top:24px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:14px;font-weight:700;color:#4f46e5">BotBuilder</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:2px">by Cato Creativo</div>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#94a3b8">
+      <div>Design System v2.0</div>
+      <div>Junio 2026</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

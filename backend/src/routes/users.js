@@ -178,9 +178,11 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 // ── Disponibilidad del agente (cualquier rol) ─────────────────────────────────
 router.put('/me/availability', authMiddleware, async (req, res) => {
   const { status } = req.body; // null = desconectado
-  await supabase.from('users')
+  const { error } = await supabase
+    .from('users')
     .update({ availability_status: status || null })
     .eq('id', req.user.id);
+  if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true, availability_status: status || null });
 });
 

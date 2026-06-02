@@ -16,6 +16,9 @@ const contactsRouter      = require('./routes/contacts');
 const templatesRouter     = require('./routes/templates');
 const labelsRouter        = require('./routes/labels');
 const reportsRouter       = require('./routes/reports');
+const hsmRouter           = require('./routes/hsm');
+const crmRouter           = require('./routes/crm');
+const { router: pushRouter } = require('./routes/push');
 
 const { sendText } = require('./services/whatsapp');
 const supabase     = require('./supabase');
@@ -25,10 +28,17 @@ const app  = express();
 const PORT = process.env.PORT || 3001;
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-// ALLOWED_ORIGINS en producción: "https://tu-app.netlify.app"
-// En local se permite todo para facilitar el desarrollo.
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  process.env.FRONTEND_URL, // ej: https://botbuilder-cato.netlify.app
+].filter(Boolean);
+
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (!origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  }
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
@@ -53,6 +63,9 @@ app.use('/api/contacts',      contactsRouter);
 app.use('/api/templates',     templatesRouter);
 app.use('/api/labels',        labelsRouter);
 app.use('/api/reports',       reportsRouter);
+app.use('/api/hsm',           hsmRouter);
+app.use('/api/crm',           authMiddleware, crmRouter);
+app.use('/api/push',          pushRouter);
 
 app.get('/api/health', (_req, res) =>
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

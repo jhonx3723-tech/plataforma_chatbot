@@ -1,5 +1,7 @@
 const express = require('express');
 const supabase = require('../supabase');
+const { authMiddleware } = require('../middleware/auth');
+const { stepFlow } = require('../services/flowEngine');
 
 const router = express.Router();
 
@@ -67,6 +69,28 @@ router.delete('/:id', async (req, res) => {
   const { error } = await supabase.from('flows').delete().eq('id', req.params.id);
   if (error) return res.status(404).json({ error: 'Flujo no encontrado' });
   res.json({ success: true });
+});
+
+// ── POST /:id/simulate — simulador del bot sin WhatsApp ───────────────────────
+router.post('/:id/simulate', authMiddleware, async (req, res) => {
+  const { data: flow, error } = await supabase
+    .from('flows').select('nodes, edges').eq('id', req.params.id).single();
+  if (error || !flow) return res.status(404).json({ error: 'Flow no encontrado' });
+
+  const { message = '', state = {} } = req.body;
+
+  try {
+    const result = stepFlow({
+      nodes:         flow.nodes || [],
+      edges:         flow.edges || [],
+      currentNodeId: state.currentNodeId ?? null,
+      variables:     state.variables     ?? {},
+      userMessage:   message,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

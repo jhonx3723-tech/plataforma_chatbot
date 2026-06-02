@@ -1,6 +1,8 @@
 const express = require('express');
 const supabase = require('../supabase');
 const { sendText, sendButtons, sendList } = require('../services/whatsapp');
+const { autoAssignAgent } = require('./conversations');
+const { sendPushToCompany } = require('./push');
 
 const router = express.Router();
 
@@ -104,6 +106,26 @@ router.post('/whatsapp/:companyId', async (req, res) => {
       .from('conversations')
       .update({ last_message: displayText, last_message_at: new Date().toISOString() })
       .eq('id', conv.id);
+
+    // Registrar ping de salud del webhook (no bloquea el flujo)
+    supabase.from('companies')
+      .update({ webhook_last_ping: new Date().toISOString() })
+      .eq('id', company.id)
+      .then(() => {}).catch(() => {});
+
+    // Push notification al agente asignado (o a toda la empresa si no hay asignado)
+    const pushPayload = {
+      type:    'new_message',
+      title:   `💬 Mensaje de ${contactName || userPhone}`,
+      body:    displayText?.slice(0, 100) || 'Nuevo mensaje',
+      convId:  conv.id,
+      url:     '/inbox',
+    };
+    if (conv.assigned_to) {
+      sendPushToCompany(company.id, pushPayload).catch(() => {});
+    } else {
+      sendPushToCompany(company.id, pushPayload).catch(() => {});
+    }
 
     if (conv.status === 'human') return;
 
@@ -268,6 +290,10 @@ router.post('/whatsapp/:companyId', async (req, res) => {
     if (nextNode.type === 'transfer') {
       await supabase.from('conversations').update({ status: 'human' }).eq('id', conv.id);
       await supabase.from('sessions').delete().eq('id', session.id);
+      // Auto-asignar agente disponible al transferir
+      if (!conv.assigned_to) {
+        autoAssignAgent(company.id, conv.id).catch(() => {});
+      }
     } else if (nextNode.type === 'end') {
       await supabase.from('sessions').delete().eq('id', session.id);
     } else {

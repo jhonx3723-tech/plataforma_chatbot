@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, Pencil, Trash2, Bot, ChevronRight,
-  ExternalLink, Copy, Check, ToggleLeft, ToggleRight, X,
+  ExternalLink, Copy, Check, ToggleLeft, ToggleRight, X, Kanban,
 } from 'lucide-react';
 import { companiesAPI, flowsAPI } from '../lib/api';
 import CompanyModal from '../components/CompanyModal';
@@ -57,6 +57,16 @@ export default function Companies() {
     const updated = await companiesAPI.update(company.id, { active: !company.active });
     setCompanies(c => c.map(x => x.id === updated.id ? updated : x));
     toast.info(updated.active ? `${updated.name} activada` : `${updated.name} desactivada`);
+  }
+
+  async function handleToggleCRM(company) {
+    try {
+      const { crm_enabled } = await companiesAPI.toggleCRM(company.id);
+      setCompanies(c => c.map(x => x.id === company.id ? { ...x, crm_enabled } : x));
+      toast.info(crm_enabled ? `CRM habilitado para ${company.name}` : `CRM deshabilitado para ${company.name}`);
+    } catch {
+      toast.error('Error al cambiar estado del CRM');
+    }
   }
 
   async function handleCreateFlow(e) {
@@ -164,16 +174,30 @@ export default function Companies() {
                     <p className="font-semibold text-slate-900 truncate">{company.name}</p>
                     <p className="text-xs text-slate-400 truncate">{company.phone}</p>
                   </div>
-                  <span className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                    company.active
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                      : 'bg-slate-50 text-slate-400 border-slate-200'
-                  }`}>
-                    {company.active ? '● Activa' : '○ Inactiva'}
-                  </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                      company.active
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                        : 'bg-slate-50 text-slate-400 border-slate-200'
+                    }`}>
+                      {company.active ? '● Activa' : '○ Inactiva'}
+                    </span>
+                    {company.crm_enabled && (
+                      <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-brand-50 text-brand-600 border-brand-200 flex items-center gap-1">
+                        <Kanban size={10} /> CRM
+                      </span>
+                    )}
+                  </div>
                 </button>
 
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => handleToggleCRM(company)}
+                    title={company.crm_enabled ? 'Deshabilitar CRM' : 'Habilitar CRM'}
+                    className={`p-2 rounded-xl transition-colors ${company.crm_enabled ? 'text-brand-500 hover:bg-brand-50' : 'text-slate-300 hover:bg-slate-100 hover:text-slate-500'}`}
+                  >
+                    <Kanban size={16} />
+                  </button>
                   <button
                     onClick={() => handleToggleActive(company)}
                     className={`p-2 rounded-xl transition-colors ${company.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-slate-300 hover:bg-slate-100 hover:text-slate-500'}`}

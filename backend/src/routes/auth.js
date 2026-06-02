@@ -33,11 +33,12 @@ router.post('/login', async (req, res) => {
   if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
 
   const payload = {
-    id:         user.id,
-    username:   user.username,
-    email:      user.email      || null,
-    role:       user.role,
-    company_id: user.company_id || null,
+    id:                  user.id,
+    username:            user.username,
+    email:               user.email               || null,
+    role:                user.role,
+    company_id:          user.company_id          || null,
+    availability_status: user.availability_status || null,
   };
 
   res.json({ token: signToken(payload), user: payload });

@@ -4,6 +4,7 @@ const supabase = require('../supabase');
 const { authMiddleware } = require('../middleware/auth');
 const { sendText, uploadMedia, sendImage } = require('../services/whatsapp');
 const broadcaster = require('../broadcaster');
+const { sendPushToUser, sendPushToCompany } = require('./push');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -232,9 +233,13 @@ router.post('/:id/reply', authMiddleware, async (req, res) => {
 
   if (msgErr) return res.status(500).json({ error: msgErr.message });
 
+  // Registrar primera respuesta del agente (SLA)
+  const slaUpdate = { last_message: message.trim(), last_message_at: now, status: 'human' };
+  if (!conv.first_response_at) slaUpdate.first_response_at = now;
+
   await supabase
     .from('conversations')
-    .update({ last_message: message.trim(), last_message_at: now, status: 'human' })
+    .update(slaUpdate)
     .eq('id', conv.id);
 
   res.status(201).json(msg);
@@ -271,7 +276,59 @@ router.post('/:id/note', authMiddleware, async (req, res) => {
   res.status(201).json(msg);
 });
 
-// ── Asignar agente ────────────────────────────────────────────────────────────
+// ── Auto-asignación round-robin por carga mínima ─────────────────────────────
+async function autoAssignAgent(companyId, conversationId) {
+  // 1. Agentes activos de la empresa con disponibilidad online
+  const { data: agents } = await supabase
+    .from('users')
+    .select('id, username, availability_status')
+    .eq('company_id', companyId)
+    .eq('role', 'company_agent')
+    .eq('active', true);
+
+  if (!agents?.length) return null;
+
+  // Preferir agentes con availability_status no nulo (online/ocupado)
+  const online = agents.filter(a => a.availability_status);
+  const pool = online.length > 0 ? online : agents;
+
+  // 2. Contar conversaciones 'human' asignadas a cada agente
+  const { data: loads } = await supabase
+    .from('conversations')
+    .select('assigned_to')
+    .eq('company_id', companyId)
+    .eq('status', 'human')
+    .not('assigned_to', 'is', null);
+
+  const loadMap = {};
+  pool.forEach(a => { loadMap[a.id] = 0; });
+  (loads || []).forEach(c => {
+    if (loadMap[c.assigned_to] !== undefined) loadMap[c.assigned_to]++;
+  });
+
+  // 3. Elegir el agente con menos carga
+  const chosen = pool.reduce((best, a) =>
+    (loadMap[a.id] ?? 0) < (loadMap[best.id] ?? 0) ? a : best
+  );
+
+  // 4. Asignar
+  await supabase
+    .from('conversations')
+    .update({ assigned_to: chosen.id })
+    .eq('id', conversationId);
+
+  // 5. Notificación push al agente asignado
+  sendPushToUser(chosen.id, {
+    type:    'assignment',
+    title:   '📋 Nueva conversación asignada',
+    body:    'Se te asignó una conversación para atender.',
+    convId:  conversationId,
+  }).catch(() => {});
+
+  return chosen;
+}
+
+// ── Asignar agente (manual) ───────────────────────────────────────────────────
 router.put('/:id/assign', authMiddleware, async (req, res) => {
   const { user_id } = req.body; // null = desasignar
 
@@ -296,6 +353,23 @@ router.put('/:id/assign', authMiddleware, async (req, res) => {
     .eq('id', conv.id)
     .select()
     .single();
+
+  // Broadcast SSE a todos los agentes de la empresa
+  broadcaster.broadcast(conv.company_id, 'assignment', {
+    conversation_id:     conv.id,
+    assigned_to:         user_id || null,
+    assigned_agent_name: agentName,
+  });
+
+  // Push al agente recién asignado
+  if (user_id) {
+    sendPushToUser(user_id, {
+      type:    'assignment',
+      title:   '📋 Conversación asignada',
+      body:    `Te asignaron la conversación con ${conv.user_phone}`,
+      convId:  conv.id,
+    }).catch(() => {});
+  }
 
   res.json({ ...updated, assigned_agent_name: agentName });
 });
@@ -468,4 +542,57 @@ router.post('/:id/send-image', authMiddleware, upload.single('file'), async (req
   }
 });
 
+// ── GET /health — SLA y salud del webhook por empresa ────────────────────────
+router.get('/health', authMiddleware, async (req, res) => {
+  const companyId = req.user.role === 'super_admin'
+    ? req.query.company_id
+    : req.user.company_id;
+  if (!companyId) return res.status(400).json({ error: 'company_id requerido' });
+
+  const [{ data: company }, { data: waiting }] = await Promise.all([
+    supabase.from('companies')
+      .select('webhook_last_ping, sla_minutes, whatsapp_phone_id')
+      .eq('id', companyId)
+      .single(),
+    supabase.from('conversations')
+      .select('id, created_at, first_response_at, user_phone')
+      .eq('company_id', companyId)
+      .eq('status', 'human')
+      .is('first_response_at', null)
+      .order('created_at', { ascending: true })
+      .limit(50),
+  ]);
+
+  const slaMinutes      = company?.sla_minutes || 60;
+  const lastPing        = company?.webhook_last_ping;
+  const pingAgeMinutes  = lastPing ? Math.floor((Date.now() - new Date(lastPing)) / 60000) : null;
+  const webhookHealthy  = !company?.whatsapp_phone_id || (pingAgeMinutes !== null && pingAgeMinutes < 120);
+
+  const now = Date.now();
+  const overdueConvs = (waiting || []).filter(c => {
+    const ageMin = Math.floor((now - new Date(c.created_at)) / 60000);
+    return ageMin > slaMinutes;
+  });
+
+  res.json({
+    webhook: {
+      healthy:          webhookHealthy,
+      last_ping:        lastPing,
+      minutes_ago:      pingAgeMinutes,
+      has_whatsapp:     !!company?.whatsapp_phone_id,
+    },
+    sla: {
+      limit_minutes:    slaMinutes,
+      waiting_count:    (waiting || []).length,
+      overdue_count:    overdueConvs.length,
+      overdue:          overdueConvs.slice(0, 5).map(c => ({
+        id:         c.id,
+        phone:      c.user_phone,
+        age_minutes: Math.floor((now - new Date(c.created_at)) / 60000),
+      })),
+    },
+  });
+});
+
 module.exports = router;
+module.exports.autoAssignAgent = autoAssignAgent;

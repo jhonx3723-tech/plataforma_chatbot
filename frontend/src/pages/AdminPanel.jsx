@@ -5,10 +5,11 @@ import {
   CheckCircle2, Clock, Bot, KeyRound, Trash2,
   ToggleLeft, ToggleRight, RefreshCw, X, Zap, AlertCircle,
   ChevronRight, Play, Square, Tag, Plus, Pencil, Bell, Save, MessageSquare,
-  UserRound, Search, Building2, FileText, Phone,
+  UserRound, Search, Building2, FileText, Phone, Smartphone, Kanban, DollarSign, Trophy, Download,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI, flowsAPI, labelsAdminAPI, followUpAPI, templatesAPI, contactsAPI, availabilityAPI } from '../lib/api';
+import { adminAPI, flowsAPI, labelsAdminAPI, followUpAPI, templatesAPI, contactsAPI, availabilityAPI, hsmAPI, crmAPI } from '../lib/api';
+import { useCrmStages } from '../lib/crmStages';
 import { useToast } from '../components/ui/Toast';
 import ConfirmModal from '../components/ui/ConfirmModal';
 
@@ -20,6 +21,8 @@ const TABS = [
   { key: 'labels',     label: 'Etiquetas',      icon: Tag           },
   { key: 'templates',  label: 'Plantillas',     icon: MessageSquare },
   { key: 'followup',   label: 'Recordatorios',  icon: Bell          },
+  { key: 'crm',        label: 'CRM',            icon: Smartphone    },
+  { key: 'hsm',        label: 'WhatsApp HSM',   icon: Smartphone    },
 ];
 
 const PERIODS = [
@@ -84,6 +87,15 @@ export default function AdminPanel() {
   const [loadingFu, setLoadingFu]   = useState(false);
   const [savingFu, setSavingFu]     = useState(false);
 
+  // CRM pipeline
+  const [crmContacts, setCrmContacts]     = useState([]);
+  const [loadingCrm, setLoadingCrm]       = useState(false);
+
+  // WhatsApp HSM
+  const [wabaId, setWabaId]         = useState('');
+  const [loadingWabaId, setLoadingWabaId] = useState(false);
+  const [savingWabaId, setSavingWabaId]   = useState(false);
+
 
   const [pwdModal, setPwdModal] = useState(null);
   const [newPwd, setNewPwd]     = useState('');
@@ -92,6 +104,12 @@ export default function AdminPanel() {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const companyId = user?.company_id;
+  const { stages, setStages } = useCrmStages(companyId);
+
+  // CRM stage management
+  const [stageForm, setStageForm] = useState({ name: '', color: '#64748b', is_won: false, is_lost: false });
+  const [savingStage, setSavingStage] = useState(false);
+  const STAGE_PRESET_COLORS = ['#64748b','#3b82f6','#f59e0b','#f97316','#10b981','#ef4444','#8b5cf6','#ec4899'];
 
   const loadStats = useCallback(async () => {
     setLoadingStats(true);
@@ -167,6 +185,15 @@ export default function AdminPanel() {
     catch { /* silent */ }
   }, [companyId]);
 
+  const loadWabaId = useCallback(async () => {
+    setLoadingWabaId(true);
+    try {
+      const { waba_id } = await hsmAPI.getWabaId();
+      setWabaId(waba_id || '');
+    } catch { /* silent */ }
+    finally { setLoadingWabaId(false); }
+  }, []);
+
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => { if (tab === 'agents') { loadAgents(); loadAvStatuses(); } }, [tab, loadAgents, loadAvStatuses]);
   useEffect(() => { if (tab === 'contacts') loadContacts(); }, [tab, loadContacts]);
@@ -174,6 +201,12 @@ export default function AdminPanel() {
   useEffect(() => { if (tab === 'labels')   loadLabels();   }, [tab, loadLabels]);
   useEffect(() => { if (tab === 'templates') loadTemplates(); }, [tab, loadTemplates]);
   useEffect(() => { if (tab === 'followup')  loadFollowUp();  }, [tab, loadFollowUp]);
+  useEffect(() => { if (tab === 'hsm')       loadWabaId();    }, [tab, loadWabaId]);
+  useEffect(() => {
+    if (tab !== 'crm') return;
+    setLoadingCrm(true);
+    crmAPI.getPipeline({ company_id: companyId }).then(setCrmContacts).catch(() => {}).finally(() => setLoadingCrm(false));
+  }, [tab, companyId]);
 
   async function handleSaveContact(e) {
     e.preventDefault();
@@ -1167,6 +1200,325 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {/* ── TAB: CRM ── */}
+      {tab === 'crm' && (
+        <div className="space-y-5">
+          {loadingCrm ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[1,2,3].map(i => <div key={i} className="card p-4 h-20 animate-pulse" />)}
+            </div>
+          ) : (
+            <>
+              {/* Stats + Export */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex gap-3 flex-wrap flex-1">
+                  {[
+                    { label: 'Deals activos',  value: crmContacts.length,                                                                                    icon: Kanban,     color: 'text-brand-600'   },
+                    { label: 'Valor pipeline', value: `$${crmContacts.reduce((s,c) => s+(Number(c.deal_value)||0), 0).toLocaleString('es-CO')}`,              icon: DollarSign, color: 'text-emerald-600' },
+                    { label: 'Ganados',        value: crmContacts.filter(c => stages.find(s => s.id === c.crm_stage_id && s.is_won)).length,                  icon: Trophy,     color: 'text-amber-500'   },
+                    { label: 'Perdidos',       value: crmContacts.filter(c => stages.find(s => s.id === c.crm_stage_id && s.is_lost)).length,                 icon: AlertCircle,color: 'text-red-500'     },
+                  ].map(({ label, value, icon: Icon, color }) => (
+                    <div key={label} className="card px-4 py-3 flex items-center gap-3">
+                      <Icon size={18} className={color} />
+                      <div>
+                        <p className={`text-xl font-bold ${color}`}>{value}</p>
+                        <p className="text-xs text-slate-400">{label}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => crmAPI.exportPipeline(companyId)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 transition-colors flex-shrink-0"
+                >
+                  <Download size={14} /> Exportar CSV
+                </button>
+              </div>
+
+              {/* Gestión de etapas */}
+              <div className="card p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                    <Kanban size={14} className="text-brand-500" /> Etapas del pipeline
+                  </h3>
+                  {stages.some(s => !s.id?.startsWith('__')) && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const defaults = await crmAPI.resetStages(companyId);
+                          setStages(defaults);
+                          toast.info('Etapas restablecidas a valores predeterminados');
+                        } catch { toast.error('Error al restablecer'); }
+                      }}
+                      className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+                    >
+                      Restablecer predeterminadas
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  {stages.map(s => (
+                    <div key={s.id || s.name} className="flex items-center gap-2.5 py-1.5 px-3 bg-slate-50 rounded-xl">
+                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                      <span className="text-sm font-medium text-slate-700 flex-1">{s.name}</span>
+                      {s.is_won && <span className="text-[10px] bg-emerald-50 text-emerald-600 border border-emerald-200 px-1.5 py-0.5 rounded-full font-semibold">Ganado</span>}
+                      {s.is_lost && <span className="text-[10px] bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded-full font-semibold">Perdido</span>}
+                      {s.id?.startsWith('__')
+                        ? <span className="text-[10px] text-slate-300">predeterminada</span>
+                        : <button onClick={async () => {
+                            try {
+                              await crmAPI.deleteStage(s.id);
+                              setStages(prev => prev.filter(x => x.id !== s.id));
+                              toast.success('Etapa eliminada');
+                            } catch { toast.error('Error al eliminar'); }
+                          }}
+                          className="p-1 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                            <Trash2 size={13} />
+                          </button>
+                      }
+                    </div>
+                  ))}
+                </div>
+
+                {/* Nueva etapa */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!stageForm.name.trim()) return;
+                    setSavingStage(true);
+                    try {
+                      // El backend siembra predeterminadas automáticamente si es necesario
+                      await crmAPI.createStage({
+                        company_id: companyId,
+                        name: stageForm.name.trim(),
+                        color: stageForm.color,
+                        sort_order: stages.length,
+                        is_won: stageForm.is_won,
+                        is_lost: stageForm.is_lost,
+                      });
+                      const updated = await crmAPI.getStages(companyId);
+                      setStages(updated);
+                      setStageForm({ name: '', color: '#64748b', is_won: false, is_lost: false });
+                      toast.success('Etapa creada');
+                    } catch (err) {
+                      toast.error(err?.response?.data?.error || 'Error al crear etapa');
+                    } finally { setSavingStage(false); }
+                  }}
+                  className="pt-3 border-t border-slate-100 space-y-3"
+                >
+                  <p className="text-xs font-semibold text-slate-500">Nueva etapa</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text" placeholder="Nombre de la etapa" value={stageForm.name}
+                      onChange={e => setStageForm(f => ({ ...f, name: e.target.value }))}
+                      className="input flex-1 text-sm" required />
+                    <div className="flex gap-1 items-center">
+                      {STAGE_PRESET_COLORS.map(c => (
+                        <button key={c} type="button" onClick={() => setStageForm(f => ({ ...f, color: c }))}
+                          className={`w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 ${stageForm.color === c ? 'border-slate-600 scale-110' : 'border-transparent'}`}
+                          style={{ backgroundColor: c }} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input type="checkbox" checked={stageForm.is_won} onChange={e => setStageForm(f => ({ ...f, is_won: e.target.checked, is_lost: e.target.checked ? false : f.is_lost }))}
+                        className="rounded text-brand-500" />
+                      <span className="text-xs text-slate-600">Marcar como "Ganado"</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input type="checkbox" checked={stageForm.is_lost} onChange={e => setStageForm(f => ({ ...f, is_lost: e.target.checked, is_won: e.target.checked ? false : f.is_won }))}
+                        className="rounded text-brand-500" />
+                      <span className="text-xs text-slate-600">Marcar como "Perdido"</span>
+                    </label>
+                  </div>
+                  <button type="submit" disabled={savingStage || !stageForm.name.trim()}
+                    className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-40">
+                    <Plus size={13} /> {savingStage ? 'Creando...' : 'Agregar etapa'}
+                  </button>
+                </form>
+              </div>
+
+              {/* Por etapa */}
+              {stages.length > 0 && (
+                <div className="card p-5">
+                  <h3 className="font-semibold text-slate-800 mb-4 text-sm">Resumen por etapa</h3>
+                  <div className="space-y-2">
+                    {stages.map(stage => {
+                      const items = crmContacts.filter(c => c.crm_stage_id === stage.id);
+                      const val   = items.reduce((s, c) => s + (Number(c.deal_value) || 0), 0);
+                      const maxCount = Math.max(...stages.map(s => crmContacts.filter(c => c.crm_stage_id === s.id).length), 1);
+                      return (
+                        <div key={stage.id || stage.name} className="flex items-center gap-3">
+                          <div className="flex items-center gap-1.5 w-28 flex-shrink-0">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />
+                            <span className="text-xs font-semibold truncate" style={{ color: stage.color }}>{stage.name}</span>
+                          </div>
+                          <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all"
+                              style={{ width: `${(items.length / maxCount) * 100}%`, backgroundColor: stage.color }} />
+                          </div>
+                          <span className="text-xs text-slate-500 w-5 text-right font-bold flex-shrink-0">{items.length}</span>
+                          {val > 0 && (
+                            <span className="text-xs text-emerald-600 font-semibold w-28 text-right flex-shrink-0">
+                              ${val.toLocaleString('es-CO')}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de deals */}
+              {crmContacts.length > 0 ? (
+                <div className="card overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50">
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Contacto</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Etapa</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Agente</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Valor</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Cierre</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {crmContacts.map(c => {
+                        const stage = stages.find(s => s.id === c.crm_stage_id) || c.stage_info;
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-slate-800">{c.name || <span className="text-slate-400 font-normal">Sin nombre</span>}</p>
+                              <p className="text-xs text-slate-400 font-mono">{c.phone}</p>
+                            </td>
+                            <td className="px-4 py-3 hidden sm:table-cell">
+                              {stage && (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+                                  style={{ backgroundColor: stage.color + '18', color: stage.color, borderColor: stage.color + '40' }}>
+                                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: stage.color }} />
+                                  {stage.name}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">
+                              {c.agent_name || <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="px-4 py-3 hidden md:table-cell text-emerald-600 font-semibold text-sm">
+                              {c.deal_value ? `$${Number(c.deal_value).toLocaleString('es-CO')}` : <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-400">
+                              {c.expected_close_date
+                                ? new Date(c.expected_close_date + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
+                                : <span className="text-slate-200">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="card text-center py-12">
+                  <Kanban size={28} className="mx-auto mb-2 text-slate-200" />
+                  <p className="text-sm font-semibold text-slate-500">Sin deals en el pipeline</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Los agentes agregan contactos al CRM desde la bandeja de conversaciones</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB: WHATSAPP HSM ── */}
+      {tab === 'hsm' && (
+        <div className="max-w-lg space-y-6">
+          {/* WABA ID card */}
+          <div className="card p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center">
+                <Smartphone size={16} className="text-green-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800">WhatsApp Business Account ID</h3>
+                <p className="text-xs text-slate-400">Necesario para consultar tus plantillas HSM aprobadas por Meta</p>
+              </div>
+            </div>
+
+            {loadingWabaId ? (
+              <div className="h-10 bg-slate-100 rounded-lg animate-pulse" />
+            ) : (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setSavingWabaId(true);
+                  try {
+                    await hsmAPI.saveWabaId(wabaId.trim());
+                    toast.success('WABA ID guardado correctamente');
+                  } catch (err) {
+                    toast.error(err?.response?.data?.error || 'Error al guardar');
+                  } finally {
+                    setSavingWabaId(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">WABA ID</label>
+                  <input
+                    type="text"
+                    className="input w-full font-mono"
+                    placeholder="Ej: 123456789012345"
+                    value={wabaId}
+                    onChange={e => setWabaId(e.target.value)}
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    Encuéntralo en{' '}
+                    <span className="font-mono text-slate-500">Meta Business Suite → Configuración → WhatsApp → Cuenta</span>
+                  </p>
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingWabaId || !wabaId.trim()}
+                  className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <Save size={14} />
+                  {savingWabaId ? 'Guardando...' : 'Guardar WABA ID'}
+                </button>
+              </form>
+            )}
+          </div>
+
+          {/* Info card */}
+          <div className="card p-5 bg-green-50 border-green-200">
+            <h4 className="font-semibold text-green-800 flex items-center gap-2 mb-3 text-sm">
+              <Smartphone size={14} />
+              ¿Qué son las plantillas HSM?
+            </h4>
+            <ul className="space-y-2 text-xs text-green-700">
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 flex-shrink-0">•</span>
+                <span>HSM (Highly Structured Messages) son plantillas aprobadas por Meta para iniciar conversaciones fuera de la ventana de 24 horas.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 flex-shrink-0">•</span>
+                <span>Se crean y gestionan en <strong>Meta Business Suite → Cuenta de WhatsApp → Plantillas de mensaje</strong>.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 flex-shrink-0">•</span>
+                <span>Una vez aprobadas por Meta, aparecerán en la bandeja al hacer clic en el botón <strong>HSM</strong>.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 flex-shrink-0">•</span>
+                <span>Los agentes pueden enviarlas desde cualquier conversación usando el botón <strong>HSM</strong> en la barra de acciones.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* Modal restablecer contraseña */}
       {pwdModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -1270,8 +1622,8 @@ function AreaChart({ data }) {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full">
       <defs>
         <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f97316" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#f97316" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#6366f1" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {/* Grid horizontal */}
@@ -1288,10 +1640,10 @@ function AreaChart({ data }) {
       {/* Area */}
       <path d={area} fill="url(#ag)" />
       {/* Line */}
-      <path d={line} fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={line} fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       {/* Dots */}
       {pts.filter(p => p.count > 0).map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r="3" fill="#f97316" />
+        <circle key={i} cx={p.x} cy={p.y} r="3" fill="#6366f1" />
       ))}
       {/* X labels */}
       {pts.filter((_, i) => i % step === 0).map((p, i) => (

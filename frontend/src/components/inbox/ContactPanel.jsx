@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { User, Building2, FileText, Save, ChevronRight, ChevronLeft,
-         ArrowRightLeft, Check, Phone, Copy, CheckCheck, UserPlus } from 'lucide-react';
-import { contactsAPI, conversationsAPI } from '../../lib/api';
+         ArrowRightLeft, Check, Phone, Copy, CheckCheck, UserPlus,
+         Kanban, DollarSign, Calendar, X, UserRound } from 'lucide-react';
+import { contactsAPI, conversationsAPI, companiesAPI } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
+import { useCrmStages } from '../../lib/crmStages';
 
 function avatarInitials(name, phone) {
   if (name) return name.slice(0, 2).toUpperCase();
@@ -11,6 +13,8 @@ function avatarInitials(name, phone) {
 
 export default function ContactPanel({ conversation, companyId, onContactUpdated, onTransferred }) {
   const { user } = useAuth();
+  const { stages } = useCrmStages(companyId);
+
   const [contact, setContact]   = useState(null);
   const [form, setForm]         = useState({ name: '', company_name: '', notes: '' });
   const [saving, setSaving]     = useState(false);
@@ -23,6 +27,10 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
   const [selectedAgent, setSelectedAgent] = useState('');
   const [transferring, setTransferring]   = useState(false);
   const [transferred, setTransferred]     = useState(false);
+  const [crmEnabled, setCrmEnabled]       = useState(false);
+  const [crmForm, setCrmForm]             = useState({ crm_stage_id: null, deal_value: '', expected_close_date: '', crm_notes: '', deal_assigned_to: '' });
+  const [showCrm, setShowCrm]             = useState(false);
+  const [savingCrm, setSavingCrm]         = useState(false);
 
   useEffect(() => {
     if (!conversation?.user_phone || !companyId) return;
@@ -36,12 +44,27 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
       .then(c => {
         setContact(c);
         setForm({ name: c.name || '', company_name: c.company_name || '', notes: c.notes || '' });
+        setCrmForm({
+          crm_stage_id:        c.crm_stage_id        || null,
+          deal_value:          c.deal_value          || '',
+          expected_close_date: c.expected_close_date || '',
+          crm_notes:           c.crm_notes           || '',
+          deal_assigned_to:    c.deal_assigned_to    || '',
+        });
       })
       .catch(() => {
         setContact(null);
         setForm({ name: '', company_name: '', notes: '' });
+        setCrmForm({ crm_stage_id: null, deal_value: '', expected_close_date: '', crm_notes: '', deal_assigned_to: '' });
       });
   }, [conversation?.user_phone, companyId]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    companiesAPI.get(companyId)
+      .then(c => setCrmEnabled(!!c.crm_enabled))
+      .catch(() => {});
+  }, [companyId]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -85,6 +108,23 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
       onTransferred?.();
     } catch { /* silent */ }
     finally { setTransferring(false); }
+  }
+
+  async function handleSaveCrm() {
+    if (!contact) return;
+    setSavingCrm(true);
+    try {
+      const updated = await contactsAPI.update(contact.id, {
+        crm_stage_id:        crmForm.crm_stage_id || null,
+        deal_value:          crmForm.deal_value ? Number(crmForm.deal_value) : null,
+        expected_close_date: crmForm.expected_close_date || null,
+        crm_notes:           crmForm.crm_notes || null,
+        deal_assigned_to:    crmForm.deal_assigned_to || null,
+      });
+      setContact(prev => ({ ...prev, ...updated }));
+      setCrmForm(f => ({ ...f, crm_stage_id: updated.crm_stage_id || null }));
+      setShowCrm(false);
+    } finally { setSavingCrm(false); }
   }
 
   function handleCopy() {
@@ -224,6 +264,133 @@ export default function ContactPanel({ conversation, companyId, onContactUpdated
             />
           </div>
         </div>
+
+        {/* ── CRM ────────────────────────────────────────────────────────────── */}
+        {crmEnabled && contact && (
+          <div className="px-4 pb-4 space-y-2 border-t border-slate-100 pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Kanban size={9} /> CRM Pipeline
+              </p>
+              {crmForm.pipeline_stage && (
+                <button
+                  onClick={() => setCrmForm(f => ({ ...f, pipeline_stage: null }))}
+                  className="text-[10px] text-red-400 hover:text-red-600 flex items-center gap-0.5"
+                >
+                  <X size={9} /> Quitar
+                </button>
+              )}
+            </div>
+
+            {!crmForm.crm_stage_id ? (
+              <button
+                onClick={() => { setCrmForm(f => ({ ...f, crm_stage_id: stages[0]?.id || null })); setShowCrm(true); }}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold border-2 border-dashed border-brand-200 text-brand-500 hover:bg-brand-50 transition-colors"
+              >
+                <Kanban size={12} /> Agregar al CRM
+              </button>
+            ) : (
+              <div className="space-y-2">
+                {/* Stage badge */}
+                {(() => {
+                  const st = stages.find(s => s.id === crmForm.crm_stage_id);
+                  return st ? (
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border"
+                      style={{ backgroundColor: st.color + '14', borderColor: st.color + '40' }}>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                      <span className="text-xs font-semibold flex-1" style={{ color: st.color }}>{st.name}</span>
+                      <button onClick={() => setShowCrm(true)} className="text-[10px] text-slate-400 hover:text-slate-600">Editar</button>
+                    </div>
+                  ) : null;
+                })()}
+                {crmForm.deal_value && (
+                  <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                    <DollarSign size={10} />
+                    {Number(crmForm.deal_value).toLocaleString('es-CO')} COP
+                  </p>
+                )}
+                {crmForm.deal_assigned_to && (
+                  <p className="text-[10px] text-brand-500 flex items-center gap-1">
+                    <UserRound size={9} />
+                    {agents.find(a => a.id === crmForm.deal_assigned_to)?.username || 'Agente'}
+                  </p>
+                )}
+                {crmForm.expected_close_date && (
+                  <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                    <Calendar size={9} />
+                    Cierre: {new Date(crmForm.expected_close_date + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                )}
+                {!showCrm && (
+                  <button onClick={() => setShowCrm(true)}
+                    className="w-full text-xs text-slate-400 hover:text-brand-500 py-1 hover:bg-brand-50 rounded-lg transition-colors">
+                    Editar deal
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Formulario inline */}
+            {showCrm && (
+              <div className="space-y-2.5 pt-1 border-t border-slate-100">
+                {/* Stage selector */}
+                <div className="grid grid-cols-2 gap-1">
+                  {stages.map(s => (
+                    <button key={s.id} type="button"
+                      onClick={() => setCrmForm(f => ({ ...f, crm_stage_id: s.id }))}
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-semibold border transition-all"
+                      style={crmForm.crm_stage_id === s.id
+                        ? { backgroundColor: s.color + '18', color: s.color, borderColor: s.color + '40' }
+                        : { backgroundColor: 'white', color: '#94a3b8', borderColor: '#e2e8f0' }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+                {agents.length > 0 && (
+                  <div className="relative">
+                    <UserRound size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <select value={crmForm.deal_assigned_to}
+                      onChange={e => setCrmForm(f => ({ ...f, deal_assigned_to: e.target.value }))}
+                      className="w-full text-xs px-3 py-1.5 pl-7 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400 appearance-none bg-white">
+                      <option value="">Sin asignar</option>
+                      {agents.map(a => <option key={a.id} value={a.id}>{a.username}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div className="relative">
+                  <DollarSign size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input type="number" min="0" value={crmForm.deal_value}
+                    onChange={e => setCrmForm(f => ({ ...f, deal_value: e.target.value }))}
+                    placeholder="Valor (COP)"
+                    className="w-full text-xs px-3 py-1.5 pl-7 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400" />
+                </div>
+                <div className="relative">
+                  <Calendar size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input type="date" value={crmForm.expected_close_date}
+                    onChange={e => setCrmForm(f => ({ ...f, expected_close_date: e.target.value }))}
+                    className="w-full text-xs px-3 py-1.5 pl-7 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400" />
+                </div>
+                <textarea rows={2} value={crmForm.crm_notes}
+                  onChange={e => setCrmForm(f => ({ ...f, crm_notes: e.target.value }))}
+                  placeholder="Notas del deal..."
+                  className="w-full text-xs px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400 resize-none" />
+                <div className="flex gap-1.5">
+                  <button onClick={() => setShowCrm(false)}
+                    className="flex-1 text-xs py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">
+                    Cancelar
+                  </button>
+                  <button onClick={handleSaveCrm} disabled={savingCrm}
+                    className="flex-1 text-xs py-1.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-semibold disabled:opacity-40 flex items-center justify-center gap-1">
+                    <Save size={10} />
+                    {savingCrm ? '...' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Transferir conversación ─────────────────────────────────────────── */}
         {agents.length > 0 && conversation?.status !== 'closed' && (
