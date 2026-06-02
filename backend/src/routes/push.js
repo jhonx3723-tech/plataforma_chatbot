@@ -5,11 +5,15 @@ const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT,
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY,
-);
+// Solo inicializar si las variables están presentes (evita crash en Railway)
+const VAPID_READY = !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT);
+if (VAPID_READY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT,
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY,
+  );
+}
 
 // GET /api/push/vapid-key — clave pública para el cliente
 router.get('/vapid-key', (req, res) => {
@@ -47,6 +51,7 @@ router.delete('/subscribe', authMiddleware, async (req, res) => {
 
 // ── Enviar push a todos los agentes de una empresa ────────────────────────────
 async function sendPushToCompany(companyId, payload) {
+  if (!VAPID_READY) return;
   const { data: subs } = await supabase
     .from('push_subscriptions')
     .select('subscription')
@@ -78,6 +83,7 @@ async function sendPushToCompany(companyId, payload) {
 
 // ── Enviar push solo al agente asignado ───────────────────────────────────────
 async function sendPushToUser(userId, payload) {
+  if (!VAPID_READY) return;
   const { data: subs } = await supabase
     .from('push_subscriptions')
     .select('subscription')
