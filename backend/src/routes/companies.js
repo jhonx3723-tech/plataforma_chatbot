@@ -6,6 +6,17 @@ const { getWAProfile, updateWAProfile } = require('../services/whatsapp');
 
 const router = express.Router();
 
+// ── Planes disponibles ────────────────────────────────────────────────────────
+const PLANS = {
+  free:        { id: 'free',        name: 'Free',        price: 0,       max_agents: 1,  max_conversations: 100,  max_flows: 1,  crm: false, color: '#94a3b8' },
+  basico:      { id: 'basico',      name: 'Básico',      price: 89900,   max_agents: 3,  max_conversations: 500,  max_flows: 3,  crm: false, color: '#60a5fa' },
+  profesional: { id: 'profesional', name: 'Profesional', price: 219900,  max_agents: 10, max_conversations: 2000, max_flows: 10, crm: true,  color: '#818cf8' },
+  empresarial: { id: 'empresarial', name: 'Empresarial', price: 449900,  max_agents: 25, max_conversations: 8000, max_flows: -1, crm: true,  color: '#f59e0b' },
+  enterprise:  { id: 'enterprise',  name: 'Enterprise',  price: 799900,  max_agents: -1, max_conversations: -1,   max_flows: -1, crm: true,  color: '#10b981' },
+};
+
+router.get('/plans', (_req, res) => res.json(Object.values(PLANS)));
+
 const DEFAULT_BUSINESS_HOURS = {
   enabled: false,
   timezone: 'America/Bogota',
@@ -100,6 +111,25 @@ router.delete('/:id', async (req, res) => {
     .from('companies').delete().eq('id', req.params.id);
   if (error) return res.status(404).json({ error: 'Empresa no encontrada' });
   res.json({ success: true });
+});
+
+// ── Cambiar plan (solo super_admin) ──────────────────────────────────────────
+router.patch('/:id/plan', requireSuperAdmin, async (req, res) => {
+  const { plan } = req.body;
+  if (!PLANS[plan]) return res.status(400).json({ error: 'Plan inválido' });
+
+  const planData = PLANS[plan];
+  const patch = {
+    plan,
+    crm_enabled: planData.crm,
+    plan_started_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('companies').update(patch).eq('id', req.params.id)
+    .select('id, plan, crm_enabled').single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
 // ── Toggle CRM (solo super_admin) ─────────────────────────────────────────────

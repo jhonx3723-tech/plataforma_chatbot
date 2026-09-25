@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   Send, Bot, UserCheck, X, RefreshCw, Search, MessageSquare,
   RotateCcw, UserPlus, StickyNote, ChevronDown, Check, Paperclip, Tag, Filter,
-  Bell, BellOff, Zap, ArrowLeft, Info, LayoutTemplate, Clock,
+  Bell, BellOff, Zap, ArrowLeft, Info, LayoutTemplate, Clock, ArrowRightLeft,
 } from 'lucide-react';
 import ContactPanel from '../components/inbox/ContactPanel';
 import TemplatePopover from '../components/inbox/TemplatePopover';
@@ -209,6 +209,10 @@ export default function Inbox() {
   const [showContactMobile, setShowContactMobile] = useState(false);
   const [typingIndicators, setTypingIndicators] = useState({}); // convId -> username
   const [showHSM, setShowHSM]             = useState(false);
+  const [showTransfer, setShowTransfer]   = useState(false);
+  const [transferAgent, setTransferAgent] = useState('');
+  const [transferNote, setTransferNote]   = useState('');
+  const [transferring, setTransferring]   = useState(false);
 
   const messagesEndRef    = useRef(null);
   const pollRef           = useRef(null);
@@ -579,6 +583,21 @@ export default function Inbox() {
     } catch { /* silent */ }
   }
 
+  async function handleTransfer() {
+    if (!selected || !transferAgent) return;
+    setTransferring(true);
+    try {
+      const { assigned_agent_name } = await conversationsAPI.transfer(selected.id, transferAgent, transferNote);
+      setSelected(prev => ({ ...prev, assigned_to: transferAgent, assigned_agent_name, status: 'human' }));
+      setConversations(prev => prev.map(c =>
+        c.id === selected.id ? { ...c, assigned_to: transferAgent, assigned_agent_name, status: 'human' } : c
+      ));
+      setShowTransfer(false);
+      setTransferAgent('');
+      setTransferNote('');
+    } catch { /* silent */ } finally { setTransferring(false); }
+  }
+
   async function handleSetReminder(opt) {
     if (!selected) return;
     setShowReminder(false);
@@ -819,59 +838,74 @@ export default function Inbox() {
             </div>
           ) : (
             <>
-              {filteredConvs.map(conv => (
+              {filteredConvs.map(conv => {
+                const isActive = selected?.id === conv.id;
+                return (
                 <button
                   key={conv.id}
                   onClick={() => selectConversation(conv)}
-                  className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors ${
-                    selected?.id === conv.id ? 'bg-brand-50 border-r-2 border-brand-500' : ''
+                  className={`w-full text-left px-3 py-3 transition-all border-l-2 ${
+                    isActive
+                      ? 'border-brand-500 bg-gradient-to-r from-brand-50/80 to-transparent'
+                      : 'border-transparent hover:bg-slate-50/80 hover:border-brand-200'
                   }`}
                 >
                   <div className="flex items-start gap-2.5">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${
-                      conv.status === 'bot' ? 'bg-brand-500' : conv.status === 'human' ? 'bg-amber-500' : 'bg-slate-400'
-                    }`}>
-                      {conv.user_phone.slice(-2)}
+                    {/* Avatar con gradiente */}
+                    <div className="relative flex-shrink-0">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-black shadow-sm"
+                        style={{
+                          background: conv.status === 'bot'
+                            ? 'linear-gradient(135deg, #818cf8, #4f46e5)'
+                            : conv.status === 'human'
+                            ? 'linear-gradient(135deg, #fbbf24, #d97706)'
+                            : 'linear-gradient(135deg, #94a3b8, #64748b)',
+                        }}>
+                        {(conv.contact_name || conv.user_phone).slice(0, 2).toUpperCase()}
+                      </div>
+                      {conv.unread > 0 && (
+                        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-brand-500 text-white text-[9px] rounded-full flex items-center justify-center font-black border border-white">
+                          {conv.unread > 9 ? '9+' : conv.unread}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex-1 min-w-0">
+                      {/* Línea 1: nombre + hora */}
                       <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <p className={`text-sm font-semibold truncate ${selected?.id === conv.id ? 'text-brand-700' : 'text-slate-900'}`}>
+                        <p className={`text-sm font-bold truncate leading-tight ${isActive ? 'text-brand-700' : 'text-slate-800'}`}>
                           {conv.contact_name || conv.user_phone}
                         </p>
-                        <div className="flex items-center gap-1 flex-shrink-0">
+                        <div className="flex items-center gap-1 flex-shrink-0 ml-1">
                           {conv.reminder_at && new Date(conv.reminder_at) > new Date() && (
-                            <span title={`Recordatorio en ${reminderLabel(conv.reminder_at)}`} className="text-amber-400">
-                              <Bell size={10} />
-                            </span>
+                            <Bell size={9} className="text-amber-400" />
                           )}
-                          {conv.unread > 0 && (
-                            <span className="w-4 h-4 bg-brand-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
-                              {conv.unread > 9 ? '9+' : conv.unread}
-                            </span>
-                          )}
-                          <span className="text-[10px] text-slate-400">{formatTime(conv.last_message_at)}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">{formatTime(conv.last_message_at)}</span>
                         </div>
                       </div>
 
+                      {/* Línea 2: teléfono si hay nombre */}
                       {conv.contact_name && (
-                        <p className="text-[10px] text-slate-400 truncate">{conv.user_phone}</p>
+                        <p className="text-[10px] text-slate-400 font-mono truncate leading-none mb-0.5">{conv.user_phone}</p>
                       )}
 
+                      {/* Línea 3: estado + último mensaje */}
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold border flex-shrink-0 ${STATUS_COLORS[conv.status]}`}>
+                        <span className={`inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold border flex-shrink-0 ${STATUS_COLORS[conv.status]}`}>
                           <span className={`w-1 h-1 rounded-full ${STATUS_DOT[conv.status]}`} />
                           {STATUS_LABELS[conv.status]}
                         </span>
-                        <p className="text-xs text-slate-400 truncate flex-1">{conv.last_message}</p>
+                        <p className="text-[11px] text-slate-400 truncate flex-1 leading-tight">{conv.last_message}</p>
                       </div>
 
+                      {/* Agente asignado */}
                       {conv.assigned_agent_name && (
-                        <div className="flex items-center gap-1 mt-1">
-                          <div className="w-3.5 h-3.5 rounded-full bg-violet-100 text-violet-600 text-[8px] font-bold flex items-center justify-center">
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <div className="w-3 h-3 rounded-full text-[7px] font-black flex items-center justify-center text-white"
+                            style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
                             {avatarInitials(conv.assigned_agent_name)}
                           </div>
-                          <span className="text-[10px] text-violet-500 truncate">{conv.assigned_agent_name}</span>
+                          <span className="text-[9px] text-violet-500 font-semibold truncate">{conv.assigned_agent_name}</span>
                         </div>
                       )}
 
@@ -906,7 +940,8 @@ export default function Inbox() {
                     </div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
               {!search.trim() && hasMore && (
                 <button
                   onClick={loadMore}
@@ -929,13 +964,22 @@ export default function Inbox() {
         flex-1 flex-col min-w-0
       `}>
         {!selected ? (
-          <div className="flex-1 flex items-center justify-center text-slate-400">
-            <div className="text-center">
-              <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-200">
-                <MessageSquare size={32} className="text-slate-300" />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center animate-slide-up">
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4"
+                style={{ background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)', border: '1px solid #c7d2fe' }}>
+                <MessageSquare size={30} className="text-brand-400" />
               </div>
-              <p className="text-sm font-semibold text-slate-500">Selecciona una conversación</p>
-              <p className="text-xs text-slate-400 mt-1">Los mensajes aparecerán aquí</p>
+              <p className="text-sm font-bold text-slate-600">Selecciona una conversación</p>
+              <p className="text-xs text-slate-400 mt-1.5">Los mensajes aparecerán aquí</p>
+              <div className="mt-4 flex items-center justify-center gap-3">
+                {['bot','human','closed'].map(s => (
+                  <div key={s} className={`flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-full border ${STATUS_COLORS[s]}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[s]}`} />
+                    {STATUS_LABELS[s]}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         ) : (
@@ -1083,6 +1127,17 @@ export default function Inbox() {
                   </div>
                 )}
 
+                {/* Transferir — solo cuando está en modo humano */}
+                {selected.status === 'human' && agents.length > 1 && (
+                  <button
+                    onClick={() => { setShowTransfer(true); setTransferAgent(''); setTransferNote(''); }}
+                    className="h-7 flex items-center gap-1.5 px-2.5 text-xs text-violet-600 border border-violet-200 bg-white rounded-lg hover:bg-violet-50 transition-colors font-semibold flex-shrink-0 whitespace-nowrap"
+                    title="Transferir a otro agente"
+                  >
+                    <ArrowRightLeft size={11} /> Transferir
+                  </button>
+                )}
+
                 {/* Separador */}
                 <div className="flex-1" />
 
@@ -1147,20 +1202,24 @@ export default function Inbox() {
                   const isOut = msg.direction === 'outbound';
                   return (
                     <div key={msg.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-xs lg:max-w-md xl:max-w-lg flex flex-col gap-1 ${isOut ? 'items-end' : 'items-start'}`}>
-                        <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                      <div className={`max-w-[75%] lg:max-w-md xl:max-w-lg flex flex-col gap-1 ${isOut ? 'items-end' : 'items-start'}`}>
+                        <div className={`px-4 py-2.5 text-sm leading-relaxed ${
                           isOut
-                            ? 'bg-brand-500 text-white rounded-br-sm shadow-sm shadow-brand-500/20'
-                            : 'bg-white text-slate-800 border border-slate-200 rounded-bl-sm shadow-sm'
-                        }`}>
+                            ? 'text-white rounded-2xl rounded-br-sm'
+                            : 'bg-white text-slate-800 border border-slate-100 rounded-2xl rounded-bl-sm shadow-sm'
+                        }`}
+                          style={isOut ? {
+                            background: 'linear-gradient(135deg, #818cf8 0%, #4f46e5 100%)',
+                            boxShadow: '0 2px 12px rgba(99,102,241,0.35)',
+                          } : {}}>
                           {msg.content}
                         </div>
-                        <div className={`flex items-center gap-1 text-[10px] text-slate-400 ${isOut ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-1 text-[10px] text-slate-400 px-1 ${isOut ? 'flex-row-reverse' : ''}`}>
                           <span>{new Date(msg.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
                           {isOut && (
                             <>
-                              <span className="text-slate-300">·</span>
-                              <span>{msg.sent_by === 'agent' ? (msg.agent_name || 'Agente') : 'Bot'}</span>
+                              <span className="text-slate-200">·</span>
+                              <span className="font-medium">{msg.sent_by === 'agent' ? (msg.agent_name || 'Agente') : 'Bot'}</span>
                             </>
                           )}
                         </div>
@@ -1437,6 +1496,74 @@ export default function Inbox() {
             setShowHSM(false);
           }}
         />
+      )}
+
+      {/* ── Modal transferir ─────────────────────────────────────────────────── */}
+      {showTransfer && selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between"
+              style={{ background: 'linear-gradient(135deg, #4c1d95, #6d28d9)' }}>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                  <ArrowRightLeft size={15} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-white font-bold text-sm">Transferir conversación</p>
+                  <p className="text-violet-300 text-xs">{selected.contact_name || selected.user_phone}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowTransfer(false)} className="p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1.5">Transferir a</label>
+                <select
+                  value={transferAgent}
+                  onChange={e => setTransferAgent(e.target.value)}
+                  className="input"
+                >
+                  <option value="">— Selecciona un agente —</option>
+                  {agents.filter(a => a.id !== selected.assigned_to).map(a => (
+                    <option key={a.id} value={a.id}>{a.username}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1.5">
+                  Nota de contexto <span className="text-slate-400 font-normal normal-case">(opcional)</span>
+                </label>
+                <textarea
+                  value={transferNote}
+                  onChange={e => setTransferNote(e.target.value)}
+                  placeholder="Ej: Cliente interesado en plan pro, ya cotizamos en reunión anterior..."
+                  rows={3}
+                  className="input resize-none"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Esta nota quedará visible en el chat como nota interna.</p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setShowTransfer(false)} className="btn-secondary flex-1">Cancelar</button>
+                <button
+                  onClick={handleTransfer}
+                  disabled={!transferAgent || transferring}
+                  className="flex-1 h-9 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}
+                >
+                  {transferring
+                    ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    : <><ArrowRightLeft size={13} /> Transferir</>
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Panel de contacto móvil/tablet (slide-over) ──────────────────────── */}

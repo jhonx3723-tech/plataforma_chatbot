@@ -3,11 +3,24 @@ import { Link } from 'react-router-dom';
 import {
   Plus, Pencil, Trash2, Bot, ChevronRight,
   ExternalLink, Copy, Check, ToggleLeft, ToggleRight, X, Kanban,
+  Crown, Zap, Building2, Sparkles, Users, MessageSquare, GitBranch, CheckCircle2,
 } from 'lucide-react';
 import { companiesAPI, flowsAPI } from '../lib/api';
 import CompanyModal from '../components/CompanyModal';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import { useToast } from '../components/ui/Toast';
+
+const PLAN_META = {
+  free:        { color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0', icon: Zap        },
+  basico:      { color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', icon: Zap        },
+  profesional: { color: '#6366f1', bg: '#eef2ff', border: '#c7d2fe', icon: Crown      },
+  empresarial: { color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', icon: Sparkles   },
+  enterprise:  { color: '#10b981', bg: '#ecfdf5', border: '#a7f3d0', icon: Building2  },
+};
+
+function fmt(n) {
+  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
+}
 
 export default function Companies() {
   const toast = useToast();
@@ -22,10 +35,24 @@ export default function Companies() {
   const [creatingFlowFor, setCreatingFlowFor] = useState(null);
   const [creatingFlow, setCreatingFlow] = useState(false);
   const [confirm, setConfirm] = useState(null);
+  const [planModal, setPlanModal] = useState(null); // company
+  const [plans, setPlans] = useState([]);
 
   useEffect(() => {
     companiesAPI.getAll().then(setCompanies).finally(() => setLoading(false));
+    companiesAPI.getPlans().then(setPlans).catch(() => {});
   }, []);
+
+  async function handleChangePlan(company, planId) {
+    try {
+      const { plan, crm_enabled } = await companiesAPI.updatePlan(company.id, planId);
+      setCompanies(c => c.map(x => x.id === company.id ? { ...x, plan, crm_enabled } : x));
+      setPlanModal(null);
+      toast.success(`Plan actualizado a ${plans.find(p => p.id === planId)?.name}`);
+    } catch {
+      toast.error('Error al actualizar el plan');
+    }
+  }
 
   async function loadFlows(companyId) {
     const data = await flowsAPI.getByCompany(companyId);
@@ -175,6 +202,23 @@ export default function Companies() {
                     <p className="text-xs text-slate-400 truncate">{company.phone}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Plan badge */}
+                    {(() => {
+                      const planId = company.plan || 'free';
+                      const meta = PLAN_META[planId] || PLAN_META.free;
+                      const Icon = meta.icon;
+                      return (
+                        <button
+                          onClick={e => { e.stopPropagation(); setPlanModal(company); }}
+                          className="text-xs font-bold px-2 py-1 rounded-full border flex items-center gap-1 transition-opacity hover:opacity-80"
+                          style={{ backgroundColor: meta.bg, borderColor: meta.border, color: meta.color }}
+                          title="Cambiar plan"
+                        >
+                          <Icon size={9} />
+                          {plans.find(p => p.id === planId)?.name || 'Free'}
+                        </button>
+                      );
+                    })()}
                     <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
                       company.active
                         ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
@@ -347,6 +391,79 @@ export default function Companies() {
           onConfirm={confirm.onConfirm}
           onCancel={() => setConfirm(null)}
         />
+      )}
+
+      {/* ── Modal de planes ── */}
+      {planModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between"
+              style={{ background: 'linear-gradient(135deg, #1e1b4b, #4338ca)' }}>
+              <div>
+                <h2 className="text-white font-black text-lg">Seleccionar plan</h2>
+                <p className="text-brand-300 text-sm mt-0.5">{planModal.name}</p>
+              </div>
+              <button onClick={() => setPlanModal(null)} className="p-2 text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Plans grid */}
+            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {plans.map(plan => {
+                const meta    = PLAN_META[plan.id] || PLAN_META.free;
+                const Icon    = meta.icon;
+                const current = (planModal.plan || 'free') === plan.id;
+                return (
+                  <button key={plan.id} onClick={() => handleChangePlan(planModal, plan.id)}
+                    className={`text-left rounded-xl border-2 p-4 transition-all hover:shadow-card ${
+                      current ? 'shadow-card' : 'border-slate-100 hover:border-slate-200'
+                    }`}
+                    style={current ? { borderColor: meta.color, backgroundColor: meta.bg } : {}}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                        style={{ background: `linear-gradient(135deg, ${meta.color}33, ${meta.color}66)` }}>
+                        <Icon size={16} style={{ color: meta.color }} />
+                      </div>
+                      {current && (
+                        <span className="flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full text-white"
+                          style={{ background: meta.color }}>
+                          <CheckCircle2 size={9} /> Actual
+                        </span>
+                      )}
+                    </div>
+                    <p className="font-black text-slate-800 text-sm">{plan.name}</p>
+                    <p className="font-black text-lg mt-0.5" style={{ color: meta.color }}>
+                      {plan.price === 0 ? 'Gratis' : fmt(plan.price)}
+                      {plan.price > 0 && <span className="text-xs font-medium text-slate-400">/mes</span>}
+                    </p>
+                    <div className="mt-3 space-y-1.5 text-[11px] text-slate-500">
+                      <div className="flex items-center gap-1.5">
+                        <Users size={10} />
+                        {plan.max_agents === -1 ? 'Agentes ilimitados' : `${plan.max_agents} agente${plan.max_agents !== 1 ? 's' : ''}`}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <MessageSquare size={10} />
+                        {plan.max_conversations === -1 ? 'Conversaciones ilimitadas' : `${plan.max_conversations.toLocaleString('es-CO')} conv/mes`}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <GitBranch size={10} />
+                        {plan.max_flows === -1 ? 'Flows ilimitados' : `${plan.max_flows} flow${plan.max_flows !== 1 ? 's' : ''}`}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Kanban size={10} />
+                        <span className={plan.crm ? 'text-emerald-600 font-semibold' : 'text-slate-400 line-through'}>
+                          CRM
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

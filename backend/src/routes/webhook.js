@@ -1,8 +1,16 @@
 const express = require('express');
+const Groq    = require('groq-sdk');
 const supabase = require('../supabase');
 const { sendText, sendButtons, sendList } = require('../services/whatsapp');
 const { autoAssignAgent } = require('./conversations');
 const { sendPushToCompany } = require('./push');
+
+let _groq = null;
+function getGroq() {
+  if (!_groq && process.env.GROQ_API_KEY)
+    _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  return _groq;
+}
 
 const router = express.Router();
 
@@ -144,7 +152,10 @@ router.post('/whatsapp/:companyId', async (req, res) => {
     const { data: flows } = await supabase
       .from('flows').select('*').eq('company_id', company.id).eq('active', 1).limit(1);
     const flow = flows?.[0];
-    if (!flow) return;
+    if (!flow) {
+      if (getGroq()) await handleWithAI(company, conv, userPhone);
+      return;
+    }
 
     const { nodes, edges } = flow;
 
@@ -452,6 +463,66 @@ async function dispatchNode(company, node, edges, nodes, userPhone, vars = {}) {
       return send(node.data.message || '¡Gracias por contactarnos! Hasta pronto.');
   }
   return null;
+}
+
+// ─── IA Groq ──────────────────────────────────────────────────────────────────
+
+async function getConversationHistory(convId, limit = 10) {
+  const { data: msgs } = await supabase
+    .from('messages')
+    .select('direction, content')
+    .eq('conversation_id', convId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (msgs || []).reverse().map(m => ({
+    role:    m.direction === 'inbound' ? 'user' : 'assistant',
+    content: m.content,
+  }));
+}
+
+async function askGroqAI(history, companyName) {
+  const groq = getGroq();
+  const completion = await groq.chat.completions.create({
+    model: 'llama-3.1-8b-instant',
+    messages: [
+      {
+        role:    'system',
+        content: `Eres un asistente de atención al cliente de "${companyName}". Responde de forma amable, concisa y en el mismo idioma del usuario. Máximo 3 oraciones por respuesta. Si el usuario pide hablar con un humano, agente o asesor, responde únicamente con: TRANSFER_TO_HUMAN`,
+      },
+      ...history,
+    ],
+    max_tokens:  400,
+    temperature: 0.7,
+  });
+  return completion.choices[0].message.content.trim();
+}
+
+async function handleWithAI(company, conv, userPhone) {
+  try {
+    const history = await getConversationHistory(conv.id);
+    if (!history.length) return;
+
+    const reply = await askGroqAI(history, company.name);
+
+    if (reply === 'TRANSFER_TO_HUMAN') {
+      const msg = 'Entendido, te conecto con un asesor. Por favor espera un momento. 🙏';
+      if (company.whatsapp_phone_id && company.whatsapp_token)
+        await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, msg);
+      await saveMessage(conv.id, company.id, 'outbound', msg, 'bot');
+      await supabase.from('conversations').update({ status: 'human' }).eq('id', conv.id);
+      autoAssignAgent(company.id, conv.id).catch(() => {});
+      return;
+    }
+
+    if (company.whatsapp_phone_id && company.whatsapp_token)
+      await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, reply);
+    await saveMessage(conv.id, company.id, 'outbound', reply, 'bot');
+    await supabase.from('conversations')
+      .update({ last_message: reply, last_message_at: new Date().toISOString() })
+      .eq('id', conv.id);
+  } catch (err) {
+    console.error('Error IA Groq:', err.message);
+  }
 }
 
 module.exports = router;

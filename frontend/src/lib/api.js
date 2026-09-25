@@ -20,6 +20,8 @@ export const companiesAPI = {
   update:          (id, data)  => api.put(`/companies/${id}`, data).then(r => r.data),
   remove:          id          => api.delete(`/companies/${id}`).then(r => r.data),
   toggleCRM:       id          => api.patch(`/companies/${id}/toggle-crm`).then(r => r.data),
+  updatePlan:      (id, plan)  => api.patch(`/companies/${id}/plan`, { plan }).then(r => r.data),
+  getPlans:        ()          => api.get('/companies/plans').then(r => r.data),
   getWAProfile:    id          => api.get(`/companies/${id}/wa-profile`).then(r => r.data),
   updateWAProfile: (id, data)  => api.put(`/companies/${id}/wa-profile`, data).then(r => r.data),
 };
@@ -40,6 +42,7 @@ export const conversationsAPI = {
   setStatus:  (id, status)  => api.put(`/conversations/${id}/status`, { status }).then(r => r.data),
   assign:     (id, user_id) => api.put(`/conversations/${id}/assign`, { user_id }).then(r => r.data),
   restartBot: id            => api.post(`/conversations/${id}/restart-bot`).then(r => r.data),
+  transfer:   (id, agent_id, note) => api.post(`/conversations/${id}/transfer`, { agent_id, note }).then(r => r.data),
   getAgents:           (company_id)  => api.get('/conversations/agents', { params: { company_id } }).then(r => r.data),
   setReminder:         (id, data)    => api.post(`/conversations/${id}/reminder`, data).then(r => r.data),
   clearReminder:       (id)          => api.delete(`/conversations/${id}/reminder`).then(r => r.data),

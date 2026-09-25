@@ -454,30 +454,39 @@ function DealModal({ contact, stages, agents, onClose, onSave }) {
 
 // ── KanbanCard ─────────────────────────────────────────────────────────────────
 
-function KanbanCard({ contact, stageIdx, totalStages, onEdit, onMoveLeft, onMoveRight }) {
+function KanbanCard({ contact, stageIdx, totalStages, stageColor, onEdit, onMoveLeft, onMoveRight }) {
   const overdue = isOverdue(contact.expected_close_date);
   const days    = daysSince(contact.crm_entered_at);
+  const initial = (contact.name || contact.phone || '?')[0].toUpperCase();
+  const color   = stageColor || '#818cf8';
 
   return (
     <div
       onClick={() => onEdit(contact)}
-      className={`bg-white rounded-xl p-3.5 shadow-card cursor-pointer hover:shadow-card-hover transition-all group border ${
-        overdue ? 'border-red-200 hover:border-red-300' : 'border-slate-200 hover:border-slate-300'
-      }`}
+      className="bg-white rounded-xl p-3.5 shadow-sm cursor-pointer hover:shadow-card transition-all group border border-slate-100 relative overflow-hidden"
+      style={overdue ? { borderColor: 'rgba(239,68,68,0.35)' } : {}}
     >
-      <div className="flex items-start justify-between gap-2 mb-1.5">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-800 truncate">
+      {/* Stage-colored left accent */}
+      <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full" style={{ background: color }} />
+
+      <div className="flex items-start gap-2.5 mb-2">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-black flex-shrink-0"
+          style={{ background: `linear-gradient(135deg, ${color}dd, ${color}99)` }}>
+          {initial}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-800 truncate leading-tight">
             {contact.name || <span className="text-slate-400 font-normal italic">Sin nombre</span>}
           </p>
           {contact.company_name && (
-            <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 truncate">
+            <p className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
               <Building2 size={8} /> {contact.company_name}
             </p>
           )}
         </div>
         {contact.deal_value ? (
-          <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md flex-shrink-0">
+          <span className="text-[10px] font-black text-white px-1.5 py-0.5 rounded-lg flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #34d399, #059669)', boxShadow: '0 2px 6px rgba(16,185,129,0.3)' }}>
             {fmt(contact.deal_value)}
           </span>
         ) : null}
@@ -512,12 +521,12 @@ function KanbanCard({ contact, stageIdx, totalStages, onEdit, onMoveLeft, onMove
 
       <div className="flex items-center justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
         <button onClick={() => onMoveLeft(contact)} disabled={stageIdx === 0}
-          className="p-1 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-0 transition-colors">
+          className="p-1 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-0 transition-colors">
           <ChevronLeft size={12} />
         </button>
         <span className="text-[8px] text-slate-300 font-semibold uppercase tracking-wider">mover</span>
         <button onClick={() => onMoveRight(contact)} disabled={stageIdx === totalStages - 1}
-          className="p-1 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-0 transition-colors">
+          className="p-1 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-0 transition-colors">
           <ChevronRight size={12} />
         </button>
       </div>
@@ -909,28 +918,32 @@ export default function CRM() {
         </div>
 
         {/* Stats */}
-        <div className="flex gap-3 mt-3 flex-wrap">
+        <div className="flex gap-2 mt-3 flex-wrap">
           {[
-            { icon: Users,       label: myDeals ? 'Mis Deals' : 'Deals',  value: total,                       color: 'text-brand-600'   },
-            { icon: DollarSign,  label: 'Pipeline',                         value: fmt(totalValue) || '$0',     color: 'text-emerald-600' },
-            { icon: Trophy,      label: 'Ganados',                          value: `${ganados} (${conversion}%)`, color: 'text-amber-600' },
-            { icon: AlertCircle, label: 'Vencidos',                         value: vencidos,                    color: vencidos > 0 ? 'text-red-500' : 'text-slate-400' },
-          ].map(({ icon: Icon, label, value, color }) => (
-            <div key={label} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
-              <Icon size={13} className={color} />
+            { icon: Users,       label: myDeals ? 'Mis Deals' : 'Total deals', value: total,                         from: '#818cf8', to: '#4f46e5', glow: 'rgba(99,102,241,0.25)'  },
+            { icon: DollarSign,  label: 'Valor pipeline',                       value: fmt(totalValue) || '$0',       from: '#34d399', to: '#059669', glow: 'rgba(16,185,129,0.2)'   },
+            { icon: Trophy,      label: 'Tasa de cierre',                       value: `${ganados} (${conversion}%)`, from: '#fbbf24', to: '#d97706', glow: 'rgba(245,158,11,0.2)'   },
+            { icon: AlertCircle, label: 'Vencidos',                             value: vencidos,                      from: vencidos > 0 ? '#f87171' : '#94a3b8', to: vencidos > 0 ? '#dc2626' : '#64748b', glow: 'rgba(239,68,68,0.15)' },
+          ].map(({ icon: Icon, label, value, from, to, glow }) => (
+            <div key={label} className="flex items-center gap-2.5 px-4 py-2.5 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-card transition-shadow">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: `linear-gradient(135deg, ${from}, ${to})`, boxShadow: `0 4px 10px ${glow}` }}>
+                <Icon size={14} className="text-white" />
+              </div>
               <div>
-                <p className={`text-sm font-bold leading-none ${color}`}>{value}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{label}</p>
+                <p className="text-sm font-black text-slate-800 leading-none">{value}</p>
+                <p className="text-[10px] text-slate-400 font-medium mt-0.5">{label}</p>
               </div>
             </div>
           ))}
 
           {myDeals && (
-            <div className="flex items-center gap-1.5 px-3 py-2 bg-brand-50 rounded-lg border border-brand-200">
+            <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border"
+              style={{ background: 'rgba(99,102,241,0.07)', borderColor: 'rgba(99,102,241,0.2)' }}>
               <Briefcase size={12} className="text-brand-500" />
-              <span className="text-xs text-brand-600 font-semibold">Mostrando Mis Deals</span>
-              <button onClick={() => setMyDeals(false)} className="text-brand-400 hover:text-brand-600 ml-1">
-                <X size={11} />
+              <span className="text-xs text-brand-600 font-bold">Mis Deals</span>
+              <button onClick={() => setMyDeals(false)} className="text-brand-400 hover:text-brand-600 ml-1 transition-colors">
+                <X size={10} />
               </button>
             </div>
           )}
@@ -1038,25 +1051,27 @@ export default function CRM() {
               return (
                 <div key={stage.id} className="w-64 flex flex-col flex-shrink-0 h-full">
                   {/* Cabecera columna */}
-                  <div
-                    className="flex items-center justify-between px-3 py-2.5 rounded-t-xl mb-2 border-b-2"
-                    style={{ backgroundColor: stage.color + '14', borderColor: stage.color + '40' }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
-                      <span className="text-xs font-bold" style={{ color: stage.color }}>{stage.name}</span>
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white/70" style={{ color: stage.color }}>
-                        {cards.length}
-                      </span>
-                      {overdueCount > 0 && (
-                        <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5">
-                          <AlertCircle size={9} /> {overdueCount}
+                  <div className="rounded-xl mb-2 overflow-hidden bg-white border border-slate-100 shadow-sm">
+                    <div className="h-1" style={{ background: `linear-gradient(90deg, ${stage.color}, ${stage.color}80)` }} />
+                    <div className="flex items-center justify-between px-3 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: stage.color, boxShadow: `0 0 6px ${stage.color}80` }} />
+                        <span className="text-xs font-black text-slate-700">{stage.name}</span>
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full text-white leading-none"
+                          style={{ background: stage.color }}>
+                          {cards.length}
                         </span>
+                        {overdueCount > 0 && (
+                          <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5">
+                            <AlertCircle size={9} /> {overdueCount}
+                          </span>
+                        )}
+                      </div>
+                      {colValue > 0 && (
+                        <span className="text-[10px] font-black text-slate-600">{fmt(colValue)}</span>
                       )}
                     </div>
-                    {colValue > 0 && (
-                      <span className="text-[10px] font-semibold text-slate-500">{fmt(colValue)}</span>
-                    )}
                   </div>
 
                   {/* Tarjetas */}
@@ -1067,6 +1082,7 @@ export default function CRM() {
                         contact={contact}
                         stageIdx={stageIdx}
                         totalStages={stages.length}
+                        stageColor={stage.color}
                         onEdit={setEditing}
                         onMoveLeft={c => moveStage(c, -1)}
                         onMoveRight={c => moveStage(c, +1)}

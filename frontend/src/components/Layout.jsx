@@ -115,130 +115,134 @@ export default function Layout() {
 
   const SidebarContent = () => (
     <>
-      {/* Logo */}
-      <div className="px-5 py-5 border-b border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center shadow-lg shadow-brand-600/40 ring-1 ring-brand-400/20">
-            <MessageSquareMore size={17} className="text-white" />
+      {/* ── Logo ── */}
+      <div className="px-4 py-4 flex items-center justify-between flex-shrink-0"
+        style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, transparent 100%)' }}>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg, #818cf8, #4338ca)', boxShadow: '0 4px 14px rgba(99,102,241,0.5)' }}>
+              <MessageSquareMore size={18} className="text-white" />
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-slate-900 animate-pulse" />
           </div>
           <div>
             <span className="font-bold text-white text-base tracking-tight">BotBuilder</span>
-            <p className="text-[10px] text-slate-500 leading-none mt-0.5">by Cato Creativo</p>
+            <p className="text-[9px] text-slate-500 leading-none mt-0.5 font-medium tracking-wide uppercase">by Cato Creativo</p>
           </div>
         </div>
-        {/* Close button — only visible on mobile */}
-        <button
-          onClick={() => setSidebarOpen(false)}
-          className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
-        >
-          <X size={18} />
+        <button onClick={() => setSidebarOpen(false)}
+          className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800/60">
+          <X size={16} />
         </button>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-widest px-3 py-2 mt-1">
-          Menú
+      {/* ── Nav ── */}
+      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto scrollbar-thin">
+        <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest px-3 pb-2 pt-1">
+          Navegación
         </p>
         {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={() => setSidebarOpen(false)}
+          <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 border-l-2 ${
                 isActive
-                  ? 'bg-brand-500/10 text-brand-300 border-l-2 border-brand-400 pl-[10px]'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100 border-l-2 border-transparent pl-[10px]'
+                  ? 'border-brand-400 text-brand-200 pl-[10px]'
+                  : 'border-transparent text-slate-400 hover:text-slate-100 pl-[10px]'
               }`
             }
+            style={({ isActive }) => isActive
+              ? { background: 'rgba(99,102,241,0.15)' }
+              : {}}
           >
             {({ isActive }) => (
               <>
-                <Icon size={16} className={isActive ? 'text-brand-400' : 'text-slate-500'} />
-                <span className="flex-1">{label}</span>
-                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-brand-400 flex-shrink-0" />}
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
+                  isActive
+                    ? 'bg-brand-500/20'
+                    : 'bg-transparent group-hover:bg-slate-800'
+                }`}>
+                  <Icon size={15} className={isActive ? 'text-brand-300' : 'text-slate-500'} />
+                </div>
+                <span className="flex-1 text-sm">{label}</span>
+                {isActive && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand-400 flex-shrink-0" />
+                )}
               </>
             )}
           </NavLink>
         ))}
       </nav>
 
-      {/* Perfil + acciones */}
-      <div className="p-4 border-t border-slate-800 space-y-2">
-        <div className="flex items-center gap-3 px-1 mb-1">
-          <div className="relative w-8 h-8 flex-shrink-0">
-            <div className="w-8 h-8 rounded-full bg-brand-600/20 border border-brand-400/30 text-brand-300 flex items-center justify-center font-bold text-sm">
+      {/* ── Perfil + acciones ── */}
+      <div className="p-3 space-y-2 border-t border-slate-800/60 flex-shrink-0">
+
+        <WebhookAlert />
+
+        {/* Avatar + info */}
+        <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl"
+          style={{ background: 'rgba(255,255,255,0.04)' }}>
+          <div className="relative flex-shrink-0">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm text-white"
+              style={{ background: 'linear-gradient(135deg, #818cf8, #6366f1)' }}>
               {user?.username?.[0]?.toUpperCase()}
             </div>
             {myStatus && (
-              <span
-                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-900"
-                style={{ backgroundColor: myStatus.color }}
-              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-900"
+                style={{ backgroundColor: myStatus.color, boxShadow: `0 0 6px ${myStatus.color}` }} />
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-slate-200 truncate">{user?.username}</p>
-            {user?.email && (
-              <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
-            )}
-            <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full border mt-0.5 ${badge.cls}`}>
+            <p className="text-sm font-semibold text-slate-100 truncate leading-tight">{user?.username}</p>
+            <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full border mt-0.5 ${badge.cls}`}>
               {badge.label}
             </span>
           </div>
         </div>
 
-        <WebhookAlert />
-
         {/* Estado de disponibilidad */}
         {!isSuperAdmin && statuses.length > 0 && (
           <div className="relative" ref={statusRef}>
-            <button
-              onClick={() => setShowStatusMenu(v => !v)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors"
-            >
-              <span
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: myStatus?.color || '#94a3b8' }}
-              />
-              <span className="flex-1 text-left text-slate-300 text-xs truncate">
+            <button onClick={() => setShowStatusMenu(v => !v)}
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-xl border border-slate-700/60 hover:border-slate-600 hover:bg-slate-800/60 transition-all group">
+              <span className="w-2 h-2 rounded-full flex-shrink-0 transition-all"
+                style={{
+                  backgroundColor: myStatus?.color || '#475569',
+                  boxShadow: myStatus ? `0 0 6px ${myStatus.color}60` : 'none',
+                }} />
+              <span className="flex-1 text-left text-slate-400 group-hover:text-slate-200 text-xs font-medium truncate transition-colors">
                 {myStatus?.name || 'Sin estado'}
               </span>
-              <ChevronDown size={12} className="text-slate-500 flex-shrink-0" />
+              <ChevronDown size={11} className="text-slate-600 group-hover:text-slate-400 transition-colors" />
             </button>
+
             {showStatusMenu && (
-              <div className="absolute bottom-full mb-1 left-0 right-0 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-1 z-50">
+              <div className="absolute bottom-full mb-2 left-0 right-0 rounded-2xl border border-slate-700 py-1.5 z-50 overflow-hidden"
+                style={{ background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 -8px 32px rgba(0,0,0,0.4)' }}>
+                <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest px-3 pb-1.5 pt-0.5">Estado</p>
                 {statuses.map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => handleSetStatus(s)}
-                    className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-slate-700 transition-colors text-left"
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                    <span className="text-sm text-slate-200">{s.name}</span>
-                    {myStatus?.name === s.name && <span className="ml-auto text-brand-400 text-xs">✓</span>}
+                  <button key={s.id} onClick={() => handleSetStatus(s)}
+                    className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-white/5 transition-colors">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: s.color, boxShadow: `0 0 6px ${s.color}80` }} />
+                    <span className="text-sm text-slate-200 font-medium flex-1 text-left">{s.name}</span>
+                    {myStatus?.name === s.name && <span className="text-brand-400 text-xs font-bold">✓</span>}
                   </button>
                 ))}
-                <div className="border-t border-slate-700 my-1" />
-                <button
-                  onClick={() => handleSetStatus(null)}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-slate-700 transition-colors"
-                >
-                  <span className="w-2.5 h-2.5 rounded-full bg-slate-500 flex-shrink-0" />
-                  <span className="text-sm text-slate-400">Sin estado</span>
+                <div className="border-t border-slate-800 my-1" />
+                <button onClick={() => handleSetStatus(null)}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-white/5 transition-colors">
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-600 flex-shrink-0" />
+                  <span className="text-sm text-slate-500">Sin estado</span>
                 </button>
               </div>
             )}
           </div>
         )}
 
-        <button
-          onClick={() => setShowChangePwd(true)}
-          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded-xl transition-colors border border-transparent hover:border-slate-700"
-        >
-          <KeyRound size={15} />
-          Cambiar contraseña
+        <button onClick={() => setShowChangePwd(true)}
+          className="flex items-center gap-2.5 w-full px-3 py-2 text-slate-500 hover:text-slate-200 hover:bg-slate-800/60 rounded-xl transition-all text-xs font-medium">
+          <KeyRound size={14} /> Cambiar contraseña
         </button>
 
         <button

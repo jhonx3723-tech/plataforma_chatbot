@@ -374,6 +374,57 @@ router.put('/:id/assign', authMiddleware, async (req, res) => {
   res.json({ ...updated, assigned_agent_name: agentName });
 });
 
+// ── Transferir a otro agente ──────────────────────────────────────────────────
+router.post('/:id/transfer', authMiddleware, async (req, res) => {
+  const { agent_id, note } = req.body;
+  if (!agent_id) return res.status(400).json({ error: 'agent_id requerido' });
+
+  const { data: conv, error } = await supabase
+    .from('conversations').select('*').eq('id', req.params.id).single();
+  if (error) return res.status(404).json({ error: 'Conversación no encontrada' });
+
+  const { data: targetAgent } = await supabase
+    .from('users').select('id, username, company_id').eq('id', agent_id).single();
+  if (!targetAgent) return res.status(404).json({ error: 'Agente no encontrado' });
+  if (targetAgent.company_id !== conv.company_id)
+    return res.status(403).json({ error: 'El agente no pertenece a esta empresa' });
+
+  const fromName = req.user.username || 'Sistema';
+  const noteText = note?.trim()
+    ? `🔄 Transferido a *${targetAgent.username}* por ${fromName}.\n📝 ${note.trim()}`
+    : `🔄 Transferido a *${targetAgent.username}* por ${fromName}.`;
+
+  await supabase.from('conversations')
+    .update({ assigned_to: agent_id, status: 'human' })
+    .eq('id', conv.id);
+
+  await supabase.from('messages').insert({
+    conversation_id: conv.id,
+    company_id:      conv.company_id,
+    direction:       'outbound',
+    content:         noteText,
+    sent_by:         'agent',
+    is_note:         true,
+    read:            true,
+  });
+
+  broadcaster.broadcast(conv.company_id, 'assignment', {
+    conversation_id:     conv.id,
+    assigned_to:         agent_id,
+    assigned_agent_name: targetAgent.username,
+  });
+
+  sendPushToUser(agent_id, {
+    type:   'transfer',
+    title:  '🔄 Conversación transferida',
+    body:   note?.trim() ? `${fromName}: ${note.trim()}` : `${fromName} te transfirió una conversación`,
+    convId: conv.id,
+    url:    '/inbox',
+  }).catch(() => {});
+
+  res.json({ success: true, assigned_agent_name: targetAgent.username });
+});
+
 // ── Reiniciar bot ─────────────────────────────────────────────────────────────
 router.post('/:id/restart-bot', authMiddleware, async (req, res) => {
   const { data: conv, error } = await supabase
