@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// En producción VITE_API_URL apunta al backend desplegado, ej:
-// https://chatbot-backend.railway.app/api
-// En local el proxy de Vite reenvía /api → localhost:3001
+// En producción VITE_API_URL apunta al backend desplegado en Render:
+// https://plataforma-chatbot.onrender.com/api
+// En local usa '/api' que Vite reenvía a localhost:3001
 export const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({ baseURL: API_BASE });
