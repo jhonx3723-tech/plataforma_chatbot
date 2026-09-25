@@ -1,2 +1,27 @@
-# Auto detect text files and perform LF normalization
+# Normalizar finales de línea para todos los archivos de texto
 * text=auto
+
+# Archivos específicos en LF (Unix)
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.env* text eol=lf
+
+# Archivos en CRLF (Windows)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Archivos binarios
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
