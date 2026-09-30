@@ -30,6 +30,8 @@ const PORT = process.env.PORT || 3001;
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  'https://magical-gaufre-076022.netlify.app',
+  'https://chat-4c2bf3bot.netlify.app',
   'http://localhost:5173',
   'http://localhost:3000',
 ].filter(Boolean);
