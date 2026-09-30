@@ -514,7 +514,7 @@ async function getConversationHistory(convId, limit = 10) {
 async function askGroqAI(history, companyName) {
   const groq = getGroq();
   const completion = await groq.chat.completions.create({
-    model: 'llama-3.2-3b-preview',
+    model: 'openai/gpt-oss-20b',
     messages: [
       {
         role:    'system',
