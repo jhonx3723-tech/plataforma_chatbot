@@ -3,7 +3,8 @@ import axios from 'axios';
 // En producción VITE_API_URL apunta al backend desplegado en Render:
 // https://plataforma-chatbot.onrender.com/api
 // En local usa '/api' que Vite reenvía a localhost:3001
-export const API_BASE = import.meta.env.VITE_API_URL || '/api';
+export const API_BASE = import.meta.env.VITE_API_URL || 'https://plataforma-chatbot.onrender.com/api';
+console.log('🔗 API Base URL:', API_BASE);
 
 const api = axios.create({ baseURL: API_BASE });
 
