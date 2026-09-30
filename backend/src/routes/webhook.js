@@ -172,18 +172,13 @@ router.post('/whatsapp/:companyId', async (req, res) => {
       .from('flows').select('*').eq('company_id', company.id).eq('active', 1).limit(1);
     const flow = flows?.[0];
     if (!flow) {
-      // Sin flujo, intentar IA o mensaje predeterminado
-      if (getHF()) {
-        await handleWithAI(company, conv, userPhone);
-      } else {
-        const defaultMsg = '¡Hola! Gracias por contactarnos. En un momento un asesor te atenderá. 😊';
-        if (company.whatsapp_phone_id && company.whatsapp_token) {
-          await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, defaultMsg);
-        }
-        await saveMessage(conv.id, company.id, 'outbound', defaultMsg, 'bot');
-        await supabase.from('conversations').update({ status: 'human' }).eq('id', conv.id);
-        autoAssignAgent(company.id, conv.id).catch(() => {});
+      // Sin flujo, responder con mensaje automático
+      const defaultMsg = '¡Hola! 👋 Gracias por contactarnos. Un asesor te atenderá en breve. 😊';
+      if (company.whatsapp_phone_id && company.whatsapp_token) {
+        await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, defaultMsg);
       }
+      await saveMessage(conv.id, company.id, 'outbound', defaultMsg, 'bot');
+      // Dejar en modo bot para que puedas responder desde el dashboard
       return;
     }
 
