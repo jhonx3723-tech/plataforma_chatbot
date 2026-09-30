@@ -519,7 +519,7 @@ async function askAI(history, companyName) {
   const response = await cohere.chat({
     message: lastMessage,
     preamble: `Eres un asistente de atención al cliente de "${companyName}". Responde de forma amable, breve y en español. Máximo 2 oraciones.`,
-    model: 'command-r',
+    model: 'command-light',
     temperature: 0.7,
     maxTokens: 150
   });
