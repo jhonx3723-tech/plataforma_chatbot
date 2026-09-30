@@ -14,6 +14,26 @@ function getGroq() {
 
 const router = express.Router();
 
+// ─── Webhook general para verificación inicial ──────────────────────────────
+router.get('/', (req, res) => {
+  const mode      = req.query['hub.mode'];
+  const token     = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === 'mitoken123') {
+    console.log('✅ Webhook verificado correctamente');
+    res.status(200).send(challenge);
+  } else {
+    console.log('❌ Verificación fallida:', { mode, token });
+    res.sendStatus(403);
+  }
+});
+
+router.post('/', (req, res) => {
+  console.log('📩 Mensaje recibido en webhook general');
+  res.sendStatus(200);
+});
+
 // ─── Verificación del webhook (GET) ──────────────────────────────────────────
 router.get('/whatsapp/:companyId', async (req, res) => {
   const { data: company } = await supabase
