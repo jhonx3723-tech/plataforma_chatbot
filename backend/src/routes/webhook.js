@@ -1,15 +1,14 @@
 const express = require('express');
-const Groq    = require('groq-sdk');
+const { HfInference } = require('@huggingface/inference');
 const supabase = require('../supabase');
 const { sendText, sendButtons, sendList } = require('../services/whatsapp');
 const { autoAssignAgent } = require('./conversations');
 const { sendPushToCompany } = require('./push');
 
-let _groq = null;
-function getGroq() {
-  if (!_groq && process.env.GROQ_API_KEY)
-    _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  return _groq;
+let _hf = null;
+function getHF() {
+  if (!_hf) _hf = new HfInference();
+  return _hf;
 }
 
 const router = express.Router();
@@ -174,7 +173,7 @@ router.post('/whatsapp/:companyId', async (req, res) => {
     const flow = flows?.[0];
     if (!flow) {
       // Sin flujo, intentar IA o mensaje predeterminado
-      if (getGroq()) {
+      if (getHF()) {
         await handleWithAI(company, conv, userPhone);
       } else {
         const defaultMsg = '¡Hola! Gracias por contactarnos. En un momento un asesor te atenderá. 😊';
@@ -511,21 +510,26 @@ async function getConversationHistory(convId, limit = 10) {
   }));
 }
 
-async function askGroqAI(history, companyName) {
-  const groq = getGroq();
-  const completion = await groq.chat.completions.create({
-    model: 'openai/gpt-oss-20b',
-    messages: [
-      {
-        role:    'system',
-        content: `Eres un asistente de atención al cliente de "${companyName}". Responde de forma amable, concisa y en el mismo idioma del usuario. Máximo 3 oraciones por respuesta. Si el usuario pide hablar con un humano, agente o asesor, responde únicamente con: TRANSFER_TO_HUMAN`,
-      },
-      ...history,
-    ],
-    max_tokens:  400,
-    temperature: 0.7,
+async function askAI(history, companyName) {
+  const hf = getHF();
+  const lastMessage = history[history.length - 1]?.content || '';
+
+  const prompt = `Eres un asistente de "${companyName}". Responde en español de forma breve y amable.
+
+Usuario: ${lastMessage}
+Asistente:`;
+
+  const response = await hf.textGeneration({
+    model: 'microsoft/DialoGPT-medium',
+    inputs: prompt,
+    parameters: {
+      max_new_tokens: 150,
+      temperature: 0.7,
+      return_full_text: false
+    }
   });
-  return completion.choices[0].message.content.trim();
+
+  return response.generated_text.trim() || '¡Hola! ¿En qué puedo ayudarte?';
 }
 
 async function handleWithAI(company, conv, userPhone) {
@@ -533,7 +537,7 @@ async function handleWithAI(company, conv, userPhone) {
     const history = await getConversationHistory(conv.id);
     if (!history.length) return;
 
-    const reply = await askGroqAI(history, company.name);
+    const reply = await askAI(history, company.name);
 
     if (reply === 'TRANSFER_TO_HUMAN') {
       const msg = 'Entendido, te conecto con un asesor. Por favor espera un momento. 🙏';
