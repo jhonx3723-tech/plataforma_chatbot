@@ -173,14 +173,18 @@ router.post('/whatsapp/:companyId', async (req, res) => {
       .from('flows').select('*').eq('company_id', company.id).eq('active', 1).limit(1);
     const flow = flows?.[0];
     if (!flow) {
-      // Sin flujo, responder con mensaje predeterminado
-      const defaultMsg = '¡Hola! Gracias por contactarnos. En un momento un asesor te atenderá. 😊';
-      if (company.whatsapp_phone_id && company.whatsapp_token) {
-        await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, defaultMsg);
+      // Sin flujo, intentar IA o mensaje predeterminado
+      if (getGroq()) {
+        await handleWithAI(company, conv, userPhone);
+      } else {
+        const defaultMsg = '¡Hola! Gracias por contactarnos. En un momento un asesor te atenderá. 😊';
+        if (company.whatsapp_phone_id && company.whatsapp_token) {
+          await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, defaultMsg);
+        }
+        await saveMessage(conv.id, company.id, 'outbound', defaultMsg, 'bot');
+        await supabase.from('conversations').update({ status: 'human' }).eq('id', conv.id);
+        autoAssignAgent(company.id, conv.id).catch(() => {});
       }
-      await saveMessage(conv.id, company.id, 'outbound', defaultMsg, 'bot');
-      await supabase.from('conversations').update({ status: 'human' }).eq('id', conv.id);
-      autoAssignAgent(company.id, conv.id).catch(() => {});
       return;
     }
 
@@ -510,7 +514,7 @@ async function getConversationHistory(convId, limit = 10) {
 async function askGroqAI(history, companyName) {
   const groq = getGroq();
   const completion = await groq.chat.completions.create({
-    model: 'mixtral-8x7b-32768',
+    model: 'llama-3.2-3b-preview',
     messages: [
       {
         role:    'system',
