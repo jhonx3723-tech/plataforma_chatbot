@@ -1,14 +1,16 @@
 const express = require('express');
-const { HfInference } = require('@huggingface/inference');
+const { CohereClient } = require('cohere-ai');
 const supabase = require('../supabase');
 const { sendText, sendButtons, sendList } = require('../services/whatsapp');
 const { autoAssignAgent } = require('./conversations');
 const { sendPushToCompany } = require('./push');
 
-let _hf = null;
-function getHF() {
-  if (!_hf) _hf = new HfInference();
-  return _hf;
+let _cohere = null;
+function getCohere() {
+  if (!_cohere && process.env.COHERE_API_KEY) {
+    _cohere = new CohereClient({ token: process.env.COHERE_API_KEY });
+  }
+  return _cohere;
 }
 
 const router = express.Router();
@@ -172,13 +174,16 @@ router.post('/whatsapp/:companyId', async (req, res) => {
       .from('flows').select('*').eq('company_id', company.id).eq('active', 1).limit(1);
     const flow = flows?.[0];
     if (!flow) {
-      // Sin flujo, responder con mensaje automático
-      const defaultMsg = '¡Hola! 👋 Gracias por contactarnos. Un asesor te atenderá en breve. 😊';
-      if (company.whatsapp_phone_id && company.whatsapp_token) {
-        await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, defaultMsg);
+      // Sin flujo, intentar IA
+      if (getCohere()) {
+        await handleWithAI(company, conv, userPhone);
+      } else {
+        const defaultMsg = '¡Hola! 👋 Gracias por contactarnos. Un asesor te atenderá en breve. 😊';
+        if (company.whatsapp_phone_id && company.whatsapp_token) {
+          await sendText(company.whatsapp_phone_id, company.whatsapp_token, userPhone, defaultMsg);
+        }
+        await saveMessage(conv.id, company.id, 'outbound', defaultMsg, 'bot');
       }
-      await saveMessage(conv.id, company.id, 'outbound', defaultMsg, 'bot');
-      // Dejar en modo bot para que puedas responder desde el dashboard
       return;
     }
 
@@ -506,25 +511,20 @@ async function getConversationHistory(convId, limit = 10) {
 }
 
 async function askAI(history, companyName) {
-  const hf = getHF();
+  const cohere = getCohere();
+  if (!cohere) return null;
+
   const lastMessage = history[history.length - 1]?.content || '';
 
-  const prompt = `Eres un asistente de "${companyName}". Responde en español de forma breve y amable.
-
-Usuario: ${lastMessage}
-Asistente:`;
-
-  const response = await hf.textGeneration({
-    model: 'microsoft/DialoGPT-medium',
-    inputs: prompt,
-    parameters: {
-      max_new_tokens: 150,
-      temperature: 0.7,
-      return_full_text: false
-    }
+  const response = await cohere.chat({
+    message: lastMessage,
+    preamble: `Eres un asistente de atención al cliente de "${companyName}". Responde de forma amable, breve y en español. Máximo 2 oraciones.`,
+    model: 'command-r',
+    temperature: 0.7,
+    maxTokens: 150
   });
 
-  return response.generated_text.trim() || '¡Hola! ¿En qué puedo ayudarte?';
+  return response.text?.trim() || '¡Hola! ¿En qué puedo ayudarte?';
 }
 
 async function handleWithAI(company, conv, userPhone) {

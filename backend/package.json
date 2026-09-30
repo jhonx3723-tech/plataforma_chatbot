@@ -12,6 +12,7 @@
     "@supabase/supabase-js": "^2.105.4",
     "axios": "^1.6.8",
     "bcryptjs": "^3.0.3",
+    "cohere-ai": "^8.1.0",
     "cors": "^2.8.5",
     "csv-parse": "^6.2.1",
     "dotenv": "^16.4.5",
