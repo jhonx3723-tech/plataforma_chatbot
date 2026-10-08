@@ -354,6 +354,17 @@ export default function Inbox() {
     finally { setLoadingMsgs(false); }
   }, []);
 
+  // Auto-actualizar mensajes de la conversación activa
+  useEffect(() => {
+    if (!selected?.id) return;
+
+    const interval = setInterval(() => {
+      loadMessages(selected.id);
+    }, 3000); // Actualizar cada 3 segundos
+
+    return () => clearInterval(interval);
+  }, [selected?.id, loadMessages]);
+
   // Solicitar permiso de notificaciones al cargar el inbox
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
