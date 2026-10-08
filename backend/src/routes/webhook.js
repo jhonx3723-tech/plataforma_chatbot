@@ -374,14 +374,23 @@ async function findOrCreateConversation(companyId, userPhone) {
 }
 
 async function saveMessage(conversationId, companyId, direction, content, sentBy) {
-  await supabase.from('messages').insert({
-    conversation_id: conversationId,
-    company_id:      companyId,
-    direction,
-    content,
-    sent_by:         sentBy,
-    read:            direction === 'outbound',
-  });
+  try {
+    const { data, error } = await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      company_id:      companyId,
+      direction,
+      content,
+      sender_type:     sentBy,  // Campo correcto basado en la consulta anterior
+      read:            direction === 'outbound',
+    });
+    if (error) {
+      console.error('❌ Error guardando mensaje:', error.message);
+    } else {
+      console.log('✅ Mensaje guardado:', direction, content?.substring(0, 30));
+    }
+  } catch (err) {
+    console.error('❌ Error en saveMessage:', err.message);
+  }
 }
 
 async function updateSession(sessionId, nodeId) {
