@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const supabase = require('../supabase');
 const { authMiddleware, requireSuperAdmin, requireCompanyAdmin } = require('../middleware/auth');
 const { getWAProfile, updateWAProfile } = require('../services/whatsapp');
+const { cacheMiddleware } = require('../middleware/cache');
 
 const router = express.Router();
 
@@ -32,10 +33,10 @@ const DEFAULT_BUSINESS_HOURS = {
   closed_message: 'Hola 👋 En este momento estamos fuera de horario de atención. Te responderemos a la brevedad. ¡Gracias por tu paciencia!',
 };
 
-router.get('/', async (req, res) => {
+router.get('/', cacheMiddleware(30000), async (req, res) => {
   const { data, error } = await supabase
     .from('companies')
-    .select('*')
+    .select('id, name, phone, whatsapp_phone_id, active, plan, created_at')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
