@@ -5,7 +5,7 @@ async function testSend() {
   console.log('🧪 Probando envío de WhatsApp...\n');
 
   const phoneId = '1081704251694620';
-  const token = 'EAAVFZBfZBF4ewBSsoyfNKiXtW3VEYDrMdyDAukYPpuled3PWF3BIksx8yieZAwfKggXoYxHvhTgNx7473lRJAtLaKbFuKZAwze3rBbrrd77n2ZCZBCJqRZAjJjcUenIZCBIcBMCLDbjDxAYcZBPleSxyeBAbQ66cgW9uqHrVRvBqSIcGLzxpH6YCp9fleBtomcEVG2rMi5wunAOJr6RfVTkMsEWiSIysEahU8DSMNYDMpsdZC3AdZB5F9FltoyKuD5aDlVlbqANCvQ90dZA2xMqepXhL76RNXQZDZD';
+  const token = 'EAAVFZBfZBF4ewBSs54HPeBHVKYa4QnvZCgHZCyQzMZCpQbspqUKyszOixTwbl0plGBbuG8QyXBWHk4IBZAVyXinddnkbfkG147FB4QR93krujJGr4umDeBuNoaMgM4qzUDYSHyX6UT13cXECu33ZBTUUviLxiNJcQQotyhtPr4EF73cvJSElXnLimHAJBIAkbe6miuA3sbVIXZAvaxJKP3sPQoJABVKP1SD7XDaal7LVoC0xPtz17FRZAiwhJh7ADz4NBcRTl8bNoFyzSPJ5H';
   const to = '573209498361'; // El número del screenshot
   const message = '¡Hola! Esta es una prueba del bot. 🤖';
 
