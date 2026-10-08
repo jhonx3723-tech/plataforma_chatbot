@@ -19,6 +19,7 @@ const reportsRouter       = require('./routes/reports');
 const hsmRouter           = require('./routes/hsm');
 const crmRouter           = require('./routes/crm');
 const { router: pushRouter } = require('./routes/push');
+const debugRouter         = require('./routes/debug');
 
 const { sendText } = require('./services/whatsapp');
 const supabase     = require('./supabase');
@@ -54,6 +55,7 @@ app.use(express.urlencoded({ extended: true }));
 // ── Rutas públicas ─────────────────────────────────────────────────────────────
 app.use('/api/auth',    authRouter);
 app.use('/webhook',     webhookRouter);
+app.use('/api/debug',   debugRouter);
 
 // ── Rutas protegidas ──────────────────────────────────────────────────────────
 app.use('/api/companies',     authMiddleware, companiesRouter);
