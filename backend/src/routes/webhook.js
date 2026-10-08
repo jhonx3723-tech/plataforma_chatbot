@@ -540,35 +540,20 @@ async function askAI(history, companyName) {
 
   const lastMessage = history[history.length - 1]?.content || '';
 
-  const response = await cohere.chat({
-    message: lastMessage,
-    preamble: `Eres un asistente virtual inteligente de atención al cliente de "${companyName}".
+  try {
+    const response = await cohere.chat({
+      message: lastMessage,
+      preamble: `Eres un asistente virtual de atención al cliente de "${companyName}". Responde en español de forma amable, natural y útil. Si el cliente pide hablar con un agente humano o necesita soporte especializado, responde exactamente: "TRANSFER_TO_HUMAN". Mantén tus respuestas conversacionales en 2-3 oraciones.`,
+      model: 'command-light',
+      temperature: 0.7,
+      maxTokens: 250
+    });
 
-Tu objetivo es ayudar a los clientes de forma amable, profesional y eficiente.
-
-INSTRUCCIONES:
-- Responde en español de forma natural y conversacional
-- Sé útil y resuelve las dudas que tengas información para responder
-- Si te preguntan sobre productos, servicios, horarios, precios o información general de la empresa, responde de forma clara
-- Si el cliente solicita hablar con un humano, necesita soporte técnico complejo, tiene una queja seria, o la conversación requiere intervención humana, responde exactamente: "TRANSFER_TO_HUMAN"
-- Sé conciso pero completo (2-4 oraciones máximo)
-- Mantén un tono amigable y profesional
-
-EJEMPLOS:
-Cliente: "Hola, ¿qué servicios ofrecen?"
-Tú: "¡Hola! En ${companyName} ofrecemos [servicios generales]. ¿Hay algo específico en lo que te pueda ayudar?"
-
-Cliente: "Necesito hablar con un agente"
-Tú: "TRANSFER_TO_HUMAN"
-
-Cliente: "¿Cuál es el horario de atención?"
-Tú: "Nuestro horario de atención es de lunes a viernes de 9:00 AM a 6:00 PM. ¿Hay algo más en lo que te pueda ayudar?"`,
-    model: 'command-light',
-    temperature: 0.8,
-    maxTokens: 300
-  });
-
-  return response.text?.trim() || '¡Hola! Soy el asistente virtual de ' + companyName + '. ¿En qué puedo ayudarte hoy?';
+    return response.text?.trim() || '¡Hola! Soy el asistente virtual de ' + companyName + '. ¿En qué puedo ayudarte hoy?';
+  } catch (error) {
+    console.error('❌ Error en askAI:', error.message);
+    return '¡Hola! Soy el asistente virtual de ' + companyName + '. ¿En qué puedo ayudarte hoy?';
+  }
 }
 
 async function handleWithAI(company, conv, userPhone) {
